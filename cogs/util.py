@@ -20,7 +20,7 @@ class Util(commands.Cog):
     @commands.command(name="reload")
     async def reload(self, ctx: commands.Context, *cogs: str) -> None:
         """
-        Reload cogs by name, or `all`
+        Reload cogs by name, or all cogs
 
         Example usage:
         `-reload all` - reloads all cogs
@@ -74,7 +74,7 @@ class Util(commands.Cog):
     @commands.command(name="remove")
     async def remove(self, ctx: commands.Context, *cogs: str):
         """
-        Remove cogs by name, or `all`
+        Remove cogs by name, or all cogs
 
         Example usage:
         `-remove all` - removes all cogs

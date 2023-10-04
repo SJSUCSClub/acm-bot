@@ -12,7 +12,7 @@ class Bot(commands.Bot):
         description: str | None = None,
     ) -> None:
         super().__init__(command_prefix, description=description, intents=intents)
-        self.help_command = PrettyHelp()
+        self.help_command = PrettyHelp(color=discord.Color.dark_purple())
 
     async def load_cogs(self):
         """
