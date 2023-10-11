@@ -8,6 +8,7 @@ class Util(commands.Cog):
     """
 
     def __init__(self, bot: commands.Bot) -> None:
+        super().__init__()
         self.bot = bot
 
     @commands.command(name="ping")
