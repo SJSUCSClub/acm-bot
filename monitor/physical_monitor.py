@@ -86,9 +86,7 @@ class DummyMonitor(PhysicalMonitor):
     Dummy monitor that randomly returns open or closed
     """
 
-    def __init__(
-        self, on_value_change: Coroutine | Callable, sleep_time: float = 3
-    ) -> None:
+    def __init__(self, on_value_change: Coroutine, sleep_time: float = 3) -> None:
         super().__init__(lambda: random.randint(0, 1) == 0, on_value_change, sleep_time)
 
 
@@ -105,12 +103,18 @@ try:
         in order to detect if the door is open or closed.
         """
 
-        def __init__(self, callback, sleep_time: float = 0.1) -> None:
+        def __init__(self, on_value_change: Coroutine, sleep_time: float = 0.1) -> None:
             """
-            Callback should be a function that takes a boolean. If True, then the door is open. if False, then closed.
+            Initializes the GPIO-based Raspberry Pi door monitor.
+
+            Arguments:
+                - on_value_change: Corouting - should be an async function that takes a boolean.
+                    If that boolean is True, then the door is open. if False, then closed.
             """
             super().__init__(
-                lambda: GPIO.input(DOOR_SENSOR_PIN) == GPIO.HIGH, callback, sleep_time
+                lambda: GPIO.input(DOOR_SENSOR_PIN) == GPIO.HIGH,
+                on_value_change,
+                sleep_time,
             )
 
             # Set the GPIO mode to BCM

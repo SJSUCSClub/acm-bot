@@ -2,6 +2,7 @@ import discord
 from discord.ext import commands
 import os
 from pretty_help import PrettyHelp
+from typing import Union
 
 
 class Bot(commands.Bot):
@@ -9,7 +10,7 @@ class Bot(commands.Bot):
         self,
         command_prefix,
         intents: discord.Intents = discord.Intents.all(),
-        description: str | None = None,
+        description: Union[str, None] = None,
     ) -> None:
         super().__init__(command_prefix, description=description, intents=intents)
         self.help_command = PrettyHelp(color=discord.Color.dark_purple())
