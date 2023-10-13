@@ -126,11 +126,17 @@ class Util(commands.Cog):
 
     @commands.command(name="shutdown")
     async def shutdown(self, ctx: commands.Context):
+        """
+        Shutdown the machine running the bot
+        """
         await ctx.send("shutting down")
         os.system("sudo shutdown now")
 
     @commands.command(name="reboot")
     async def reboot(self, ctx: commands.Context):
+        """
+        Reboot the machine running the bot
+        """
         await ctx.send("rebooting...")
         os.system("sudo reboot now")
 
