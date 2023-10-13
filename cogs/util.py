@@ -129,6 +129,11 @@ class Util(commands.Cog):
         await ctx.send("shutting down")
         os.system("sudo shutdown now")
 
+    @commands.command(name="reboot")
+    async def reboot(self, ctx: commands.Context):
+        await ctx.send("rebooting...")
+        os.system("sudo reboot now")
+
 
 async def setup(bot: commands.Bot):
     await bot.add_cog(Util(bot))
