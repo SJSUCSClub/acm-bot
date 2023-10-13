@@ -1,5 +1,6 @@
 from discord.ext import commands
 import discord
+import os
 
 
 class Util(commands.Cog):
@@ -122,6 +123,11 @@ class Util(commands.Cog):
             await ctx.send(embed=embed)
         else:
             await ctx.send("An argument is required!")
+
+    @commands.command(name="shutdown")
+    async def shutdown(self, ctx: commands.Context):
+        await ctx.send("shutting down")
+        os.system("sudo shutdown now")
 
 
 async def setup(bot: commands.Bot):
