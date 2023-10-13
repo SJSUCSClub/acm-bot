@@ -24,7 +24,7 @@ class Monitor(commands.Cog):
         self.physical_monitor: PhysicalMonitor = monitor_type(self.send_announcement)
 
     @commands.command(name="linkMonitor")
-    @is_guild_owner()
+    @commands.check_any(is_guild_owner(), commands.is_owner())
     async def link_channel(
         self, ctx: commands.Context, channel: Union[discord.TextChannel, str]
     ):
@@ -50,7 +50,7 @@ class Monitor(commands.Cog):
             )
 
     @commands.command(name="testLink")
-    @is_guild_owner()
+    @commands.check_any(is_guild_owner(), commands.is_owner())
     async def test_link(self, ctx: commands.Context):
         """
         Test if the bot is correctly set up to send door monitor announcements to the given channel
@@ -65,7 +65,7 @@ class Monitor(commands.Cog):
             )
 
     @commands.command(name="startMonitor")
-    @is_guild_owner()
+    @commands.check_any(is_guild_owner(), commands.is_owner())
     async def start_monitor(self, ctx: commands.Context):
         """
         Start the physical monitor so that updates on the door status
@@ -76,7 +76,7 @@ class Monitor(commands.Cog):
         await ctx.send("Started physical monitor.")
 
     @commands.command(name="stopMonitor")
-    @is_guild_owner()
+    @commands.check_any(is_guild_owner(), commands.is_owner())
     async def stop_monitor(self, ctx: commands.Context):
         """
         Stop the physical monitor, stopping all door announcement messages as well.

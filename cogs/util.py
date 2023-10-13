@@ -1,6 +1,7 @@
 from discord.ext import commands
 import discord
 import os
+from checks.userchecks import is_guild_owner
 
 
 class Util(commands.Cog):
@@ -20,6 +21,7 @@ class Util(commands.Cog):
         await ctx.send(f"Pong 🏓! Latency was {int(self.bot.latency * 1000)} ms")
 
     @commands.command(name="reload")
+    @commands.check_any(is_guild_owner(), commands.is_owner())
     async def reload(self, ctx: commands.Context, *cogs: str) -> None:
         """
         Reload cogs by name, or all cogs
@@ -74,6 +76,7 @@ class Util(commands.Cog):
             await ctx.send("An argument is required!")
 
     @commands.command(name="remove")
+    @commands.check_any(is_guild_owner(), commands.is_owner())
     async def remove(self, ctx: commands.Context, *cogs: str):
         """
         Remove cogs by name, or all cogs
@@ -125,6 +128,7 @@ class Util(commands.Cog):
             await ctx.send("An argument is required!")
 
     @commands.command(name="shutdown")
+    @commands.check_any(is_guild_owner(), commands.is_owner())
     async def shutdown(self, ctx: commands.Context):
         """
         Shutdown the machine running the bot
@@ -133,6 +137,7 @@ class Util(commands.Cog):
         os.system("sudo shutdown now")
 
     @commands.command(name="reboot")
+    @commands.check_any(is_guild_owner(), commands.is_owner())
     async def reboot(self, ctx: commands.Context):
         """
         Reboot the machine running the bot
