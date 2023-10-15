@@ -133,3 +133,5 @@ try:
     MONITOR_TYPE = RPIMonitor
 except RuntimeError:
     pass
+except ModuleNotFoundError:
+    pass
