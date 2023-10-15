@@ -131,7 +131,7 @@ try:
             GPIO.cleanup()
 
     MONITOR_TYPE = RPIMonitor
-except RuntimeError:
-    pass
+    print("Using RPIMonitor.")
 except ModuleNotFoundError:
-    pass
+    # testing on a machine that doesn't have Raspberry pi GPIO pins
+    print("Using DummyMonitor.")
