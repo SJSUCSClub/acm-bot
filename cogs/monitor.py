@@ -97,9 +97,17 @@ class Monitor(commands.Cog):
         """
         if self.channel:
             if doorOpen:
-                await self.channel.send("Door is now open!")
+                embed = discord.Embed(
+                    colour=discord.Colour.green(),
+                    description="The door is now open!",
+                )
+                await self.channel.send(embed=embed)
             else:
-                await self.channel.send("Door is now closed!")
+                embed = discord.Embed(
+                    colour = discord.Colour.red(),
+                    description = "The door is now closed!"
+                )
+                await self.channel.send(embed=embed)
 
 
 async def setup(bot: commands.Bot):
