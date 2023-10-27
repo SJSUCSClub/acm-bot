@@ -110,6 +110,12 @@ class Monitor(commands.Cog):
                 )
                 await channel.send(embed=embed)
 
+    async def cog_unload(self) -> None:
+        """
+        Stop physical monitor before unloading the cog
+        """
+        await self.physical_monitor.stop()
+
 
 async def setup(bot: commands.Bot):
     await bot.add_cog(Monitor(bot, MONITOR_TYPE))

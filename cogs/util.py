@@ -37,24 +37,25 @@ class Util(commands.Cog):
         loaded_cogs = []
         errors = []
 
-        for cog in cogs:
-            cog_file = cog.strip().lower()
-            cog_name = cog_file.title()
-            already_loaded = f"cogs.{cog_file}" in self.bot.extensions
+        async with ctx.typing():
+            for cog in cogs:
+                cog_file = cog.strip().lower()
+                cog_name = cog_file.title()
+                already_loaded = f"cogs.{cog_file}" in self.bot.extensions
 
-            # load / reload the extension, or catch an error
-            try:
-                if already_loaded:
-                    await self.bot.reload_extension(f"cogs.{cog_file}")
-                    reloaded_cogs.append(cog_name)
-                else:
-                    await self.bot.load_extension(f"cogs.{cog_file}")
-                    loaded_cogs.append(cog_name)
-            except Exception as e:
-                if already_loaded:
-                    errors.append(f"Failed to reload {cog_name} because {e}")
-                else:
-                    errors.append(f"Failed to load {cog_name} because {e}")
+                # load / reload the extension, or catch an error
+                try:
+                    if already_loaded:
+                        await self.bot.reload_extension(f"cogs.{cog_file}")
+                        reloaded_cogs.append(cog_name)
+                    else:
+                        await self.bot.load_extension(f"cogs.{cog_file}")
+                        loaded_cogs.append(cog_name)
+                except Exception as e:
+                    if already_loaded:
+                        errors.append(f"Failed to reload {cog_name} because {e}")
+                    else:
+                        errors.append(f"Failed to load {cog_name} because {e}")
 
         # send results
         if len(cogs) > 0:
@@ -92,19 +93,20 @@ class Util(commands.Cog):
         nonloaded_cogs = []
         errors = []
 
-        for cog in cogs:
-            cog_file = cog.strip().lower()
-            cog_name = cog_file.title()
+        async with ctx.typing():
+            for cog in cogs:
+                cog_file = cog.strip().lower()
+                cog_name = cog_file.title()
 
-            # remove the extension, or catch an error
-            try:
-                if f"cogs.{cog_file}" in self.bot.extensions:
-                    await self.bot.unload_extension(f"cogs.{cog_file}")
-                    removed_cogs.append(cog_name)
-                else:
-                    nonloaded_cogs.append(cog_name)
-            except Exception as e:
-                errors.append(f"Failed to remove {cog_name} because {e}")
+                # remove the extension, or catch an error
+                try:
+                    if f"cogs.{cog_file}" in self.bot.extensions:
+                        await self.bot.unload_extension(f"cogs.{cog_file}")
+                        removed_cogs.append(cog_name)
+                    else:
+                        nonloaded_cogs.append(cog_name)
+                except Exception as e:
+                    errors.append(f"Failed to remove {cog_name} because {e}")
 
         # send results
         if len(cogs) > 0:

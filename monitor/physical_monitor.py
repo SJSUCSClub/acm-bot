@@ -76,12 +76,6 @@ class PhysicalMonitor:
         except asyncio.exceptions.CancelledError:
             pass
 
-    def __del__(self) -> None:
-        """
-        Take care of cleaning up this object
-        """
-        asyncio.run(self.stop())
-
 
 class DummyMonitor(PhysicalMonitor):
     """
