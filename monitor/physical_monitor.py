@@ -40,8 +40,10 @@ class PhysicalMonitor:
         """
         Initialize running on a separate thread
         """
-        self.run = True
-        self.process = asyncio.Task(self._loop())
+        # only start the task if it isn't already started
+        if not self.run:
+            self.run = True
+            self.process = asyncio.Task(self._loop())
 
     async def stop(self) -> None:
         """

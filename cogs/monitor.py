@@ -1,6 +1,6 @@
 from discord.ext import commands
 import discord
-from typing import Union
+from typing import Union, Mapping
 from monitor.physical_monitor import MONITOR_TYPE, PhysicalMonitor
 from checks.userchecks import is_guild_owner
 
@@ -20,7 +20,9 @@ class Monitor(commands.Cog):
     def __init__(self, bot: commands.Bot, monitor_type: type) -> None:
         super().__init__()
         self.bot = bot
-        self.channel: discord.TextChannel = None
+
+        # maps from the guild id to the channel in that guild
+        self.channels: Mapping[int, discord.TextChannel] = {}
         self.physical_monitor: PhysicalMonitor = monitor_type(self.send_announcement)
 
     @commands.command(name="linkMonitor")
@@ -44,7 +46,7 @@ class Monitor(commands.Cog):
                 f"Sorry, couldn't find the channel {channel}. Please try again, and make sure there aren't any typos."
             )
         else:
-            self.channel = channel
+            self.channels[ctx.guild.id] = channel
             await ctx.send(
                 f"Now using {channel.mention} as the place to send announcements"
             )
@@ -55,9 +57,9 @@ class Monitor(commands.Cog):
         """
         Test if the bot is correctly set up to send door monitor announcements to the given channel
         """
-        if self.channel:
-            await self.channel.send(
-                f"Correctly linked to send door monitor announcements to {self.channel.mention}"
+        if ctx.guild.id in self.channels:
+            await self.channels[ctx.guild.id].send(
+                f"Correctly linked to send door monitor announcements to {self.channels[ctx.guild.id].mention}"
             )
         else:
             await ctx.send(
@@ -95,19 +97,18 @@ class Monitor(commands.Cog):
             - doorOpen: bool - if True, then the bot will send an announcement saying the door
                 is open. Else, the bot will send an announcement saying that the door is closed.
         """
-        if self.channel:
+        for channel in self.channels.values():
             if doorOpen:
                 embed = discord.Embed(
                     colour=discord.Colour.green(),
                     description="The door is now open!",
                 )
-                await self.channel.send(embed=embed)
+                await channel.send(embed=embed)
             else:
                 embed = discord.Embed(
-                    colour = discord.Colour.red(),
-                    description = "The door is now closed!"
+                    colour=discord.Colour.red(), description="The door is now closed!"
                 )
-                await self.channel.send(embed=embed)
+                await channel.send(embed=embed)
 
 
 async def setup(bot: commands.Bot):
