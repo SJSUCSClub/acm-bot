@@ -1,8 +1,9 @@
 from discord.ext import commands
 import discord
-from typing import Union, Mapping
+from typing import Union, Mapping, List, Tuple
 from monitor.physical_monitor import MONITOR_TYPE, PhysicalMonitor
 from checks.userchecks import is_guild_owner
+from datetime import datetime
 
 
 class Monitor(commands.Cog):
@@ -17,13 +18,18 @@ class Monitor(commands.Cog):
     without errors.
     """
 
-    def __init__(self, bot: commands.Bot, monitor_type: type) -> None:
+    def __init__(
+        self, bot: commands.Bot, monitor_type: type, max_history_len: int = 30
+    ) -> None:
         super().__init__()
         self.bot = bot
 
         # maps from the guild id to the channel in that guild
         self.channels: Mapping[int, discord.TextChannel] = {}
         self.physical_monitor: PhysicalMonitor = monitor_type(self.send_announcement)
+
+        self.max_history_len = max_history_len
+        self.history: List[Tuple[int, str]] = []
 
     @commands.command(name="linkMonitor")
     @commands.check_any(is_guild_owner(), commands.is_owner())
@@ -110,11 +116,26 @@ class Monitor(commands.Cog):
                 )
                 await channel.send(embed=embed)
 
+        self.history.append(
+            (int(datetime.now().timestamp()), "Open" if doorOpen else "Closed")
+        )
+        if len(self.history) > self.max_history_len:
+            self.history = self.history[1:]
+
     async def cog_unload(self) -> None:
         """
         Stop physical monitor before unloading the cog
         """
         await self.physical_monitor.stop()
+
+    @commands.command()
+    async def history(self, ctx: commands.Context):
+        emb = discord.Embed(title="Door History", color=discord.Colour.blurple())
+        emb.description = "\n".join(
+            f"{state}".ljust(12) + "-" + f"<t:{timestamp}>".rjust(64)
+            for timestamp, state in reversed(self.history)
+        )
+        await ctx.send(embed=emb)
 
 
 async def setup(bot: commands.Bot):
