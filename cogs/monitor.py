@@ -42,14 +42,35 @@ class Monitor(commands.Cog):
 
         if door_open:
             embed.color = discord.Colour.green()
-            embed.description = f"The door was opened at {timestamp}"
+            embed.description = f"MQH 227 is now open - {timestamp}"
         else:
             embed.color = discord.Colour.red()
-            embed.description = f"The door was closed at {timestamp}"
+            embed.description = f"MQH 227 is now closed - {timestamp}"
 
         return embed, file
+    
+    async def send_announcement(self, door_open: bool):
+        """
+        Sends an announcement on the status of the door
+        to the channel that the bot's door monitor is linked
+        to. If the bot's door monitor isn't linked to a channel,
+        nothing will happen.
 
-    @commands.command(name="linkMonitor")
+        Arguments:
+            - doorOpen: bool - if True, then the bot will send an announcement saying the door
+                is open. Else, the bot will send an announcement saying that the door is closed.
+        """
+        for guild in self.messages:
+            embed, _ = await self.create_status_embed(door_open)
+            self.messages[guild] = await self.messages[guild].edit(embed=embed)
+
+        self.history.append(
+            (int(datetime.now().timestamp()), "Open" if door_open else "Closed")
+        )
+        if len(self.history) > self.max_history_len:
+            self.history = self.history[1:]
+
+    @commands.command(name="linkMonitor", aliases=["link"])
     @commands.check_any(is_guild_owner(), commands.is_owner())
     async def link_channel(
         self, ctx: commands.Context, channel: Union[discord.TextChannel, str]
@@ -76,7 +97,7 @@ class Monitor(commands.Cog):
                 f"Now using {channel.mention} as the place to send announcements"
             )
 
-    @commands.command(name="testLink")
+    @commands.command(name="testLink", aliases=["test"])
     @commands.check_any(is_guild_owner(), commands.is_owner())
     async def test_link(self, ctx: commands.Context):
         """
@@ -91,8 +112,8 @@ class Monitor(commands.Cog):
                 "Not linked to any channel. Use `-linkMonitor` to link the door monitor to a channel."
             )
 
-    @commands.command(name="startMonitor")
-    @commands.check_any(is_guild_owner(), commands.is_owner())
+    @commands.command(name="startMonitor", aliases=["start"])
+    @commands.is_owner()
     async def start_monitor(self, ctx: commands.Context):
         """
         Start the physical monitor so that updates on the door status
@@ -102,8 +123,8 @@ class Monitor(commands.Cog):
         await self.physical_monitor.start()
         await ctx.send("Started physical monitor.")
 
-    @commands.command(name="stopMonitor")
-    @commands.check_any(is_guild_owner(), commands.is_owner())
+    @commands.command(name="stopMonitor", aliases=["stop"])
+    @commands.is_owner()
     async def stop_monitor(self, ctx: commands.Context):
         """
         Stop the physical monitor, stopping all door announcement messages as well.
@@ -111,37 +132,12 @@ class Monitor(commands.Cog):
         await self.physical_monitor.stop()
         await ctx.send("Stopped physical monitor.")
 
-    async def send_announcement(self, door_open: bool):
-        """
-        Sends an announcement on the status of the door
-        to the channel that the bot's door monitor is linked
-        to. If the bot's door monitor isn't linked to a channel,
-        nothing will happen.
-
-        Arguments:
-            - doorOpen: bool - if True, then the bot will send an announcement saying the door
-                is open. Else, the bot will send an announcement saying that the door is closed.
-        """
-        for guild in self.messages:
-            embed, _ = await self.create_status_embed(door_open)
-            self.messages[guild] = await self.messages[guild].edit(embed=embed)
-
-        self.history.append(
-            (int(datetime.now().timestamp()), "Open" if door_open else "Closed")
-        )
-        if len(self.history) > self.max_history_len:
-            self.history = self.history[1:]
-
     @commands.command()
     async def history(self, ctx: commands.Context):
-        emb = discord.Embed(title="Door History", color=discord.Colour.blurple())
+        embed = discord.Embed(title="Door History", description="", color=discord.Colour.blurple())
         for timestamp, state in reversed(self.history):
-            emb.add_field(
-                name=f"{self.emojis[state]}{state}",
-                value=f"<t:{timestamp}>",
-                inline=False,
-            )
-        await ctx.send(embed=emb)
+            embed.description += f"{self.emojis[state]} {state} - <t:{timestamp}>\n"
+        await ctx.send(embed=embed)
 
     async def cog_unload(self) -> None:
         """
