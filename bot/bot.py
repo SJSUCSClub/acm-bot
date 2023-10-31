@@ -55,3 +55,8 @@ class Bot(commands.Bot):
 
     async def on_ready(self):
         print("ready!")
+
+    async def on_command_error(
+        self, ctx: commands.Context, exception: commands.CommandError
+    ) -> None:
+        await ctx.send(exception)
