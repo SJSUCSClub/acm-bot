@@ -25,7 +25,7 @@ class Bot(commands.Bot):
                 user id as an item in owner_ids, commands that require you to be a guild owner
                 or a bot owner will work.
         """
-        super().__init__(command_prefix, description=description, intents=intents)
+        super().__init__(command_prefix, description=description, intents=intents, case_insensitive=True)
         self.help_command = PrettyHelp(color=discord.Color.dark_purple())
         if len(owner_ids) > 0:
             self.owner_ids = owner_ids
@@ -54,6 +54,7 @@ class Bot(commands.Bot):
         await self.load_cogs()
 
     async def on_ready(self):
+        await self.change_presence(activity=discord.Game(name="acmsjsu.org"))
         print("ready!")
 
     async def on_command_error(
