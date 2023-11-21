@@ -4,6 +4,7 @@ from typing import Union, Mapping, List, Tuple
 from monitor.physical_monitor import MONITOR_TYPE, PhysicalMonitor
 from checks.userchecks import is_guild_owner
 from datetime import datetime
+from util.page import PageView
 
 
 class Monitor(commands.Cog):
@@ -19,7 +20,11 @@ class Monitor(commands.Cog):
     """
 
     def __init__(
-        self, bot: commands.Bot, monitor_type: type, max_history_len: int = 25
+        self,
+        bot: commands.Bot,
+        monitor_type: type,
+        num_per_page: int = 10,
+        max_history_len: int = 1000,
     ) -> None:
         super().__init__()
         self.bot = bot
@@ -28,6 +33,7 @@ class Monitor(commands.Cog):
         self.messages: Mapping[int, discord.Message] = {}
         self.physical_monitor: PhysicalMonitor = monitor_type(self.send_announcement)
 
+        self.num_per_page = num_per_page
         self.max_history_len = max_history_len
         self.history: List[Tuple[int, str]] = []
         self.emojis = {"Open": ":unlock:", "Closed": ":lock:"}
@@ -48,7 +54,7 @@ class Monitor(commands.Cog):
             embed.description = f"MQH 227 is now closed - {timestamp}"
 
         return embed, file
-    
+
     async def send_announcement(self, door_open: bool):
         """
         Sends an announcement on the status of the door
@@ -132,12 +138,39 @@ class Monitor(commands.Cog):
         await self.physical_monitor.stop()
         await ctx.send("Stopped physical monitor.")
 
-    @commands.command()
-    async def history(self, ctx: commands.Context):
-        embed = discord.Embed(title="Door History", description="", color=discord.Colour.blurple())
-        for timestamp, state in reversed(self.history):
+    async def get_page(self, page: int):
+        embed = discord.Embed(
+            title="Door History", description="", color=discord.Colour.blurple()
+        )
+
+        start = -(page + 1) * self.num_per_page
+        end = -page * self.num_per_page if page != 0 else len(self.history)
+
+        for timestamp, state in reversed(self.history[start:end]):
             embed.description += f"{self.emojis[state]} {state} - <t:{timestamp}>\n"
-        await ctx.send(embed=embed)
+
+        embed.set_footer(text=f"Showing page {page+1}/{self.get_total_pages()}")
+        return embed
+
+    def get_total_pages(self):
+        return len(self.history) // self.num_per_page + (
+            1 if (len(self.history) % self.num_per_page) != 0 else 0
+        )
+
+    @commands.command(name="history")
+    async def get_history(self, ctx: commands.Context):
+        """
+        Get the history of when the door was opened/closed.
+        """
+        await ctx.send(
+            embed=await self.get_page(0),
+            view=PageView(
+                user=ctx.author,
+                get_page=self.get_page,
+                get_total_pages=self.get_total_pages,
+                timeout=20,
+            ),
+        )
 
     async def cog_unload(self) -> None:
         """

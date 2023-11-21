@@ -37,8 +37,10 @@ class Util(commands.Cog):
         errors = []
 
         if cogs[0] == "all":
-            cogs = [cog.strip(".py") for cog in os.listdir("cogs") if cog != "__pycache__"]
-        
+            cogs = [
+                cog.strip(".py") for cog in os.listdir("cogs") if cog != "__pycache__"
+            ]
+
         async with ctx.typing():
             for cog in cogs:
                 cog_file = cog.strip().lower()
@@ -96,8 +98,10 @@ class Util(commands.Cog):
         errors = []
 
         if cogs[0] == "all":
-            cogs = [cog.strip(".py") for cog in os.listdir("cogs") if cog != "__pycache__"]
-        
+            cogs = [
+                cog.strip(".py") for cog in os.listdir("cogs") if cog != "__pycache__"
+            ]
+
         async with ctx.typing():
             for cog in cogs:
                 cog_file = cog.strip().lower()
