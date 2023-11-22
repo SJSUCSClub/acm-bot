@@ -1,5 +1,5 @@
-from collections.abc import Coroutine, Callable
-import asyncio
+from typing import Callable
+import time
 import random
 
 # Define the GPIO pin number to which the sensor is connected
@@ -13,8 +13,8 @@ class PhysicalMonitor:
 
     def __init__(
         self,
-        value_function: Callable,
-        on_value_change: Coroutine,
+        value_function: Callable[[], bool],
+        on_value_change: Callable[[bool], None],
         sleep_time: float,
     ) -> None:
         """
@@ -22,7 +22,7 @@ class PhysicalMonitor:
 
         Arguments:
             - value_function - a function that returns the current state in boolean format
-            - on_value_change - an async function that takes a boolean that represents the
+            - on_value_change - a function that takes a boolean that represents the
                 new state of the physical monitor.
             - sleep_time - how long to wait in between reads
         """
@@ -34,47 +34,30 @@ class PhysicalMonitor:
 
         self.prev_state = False
         self.run = False
-        self.process = None
 
-    async def start(self) -> None:
+    def start(self) -> None:
         """
-        Initialize running on a separate thread
+        Initialize running, blocking the current thread
         """
         # only start the task if it isn't already started
         if not self.run:
             self.run = True
-            self.process = asyncio.Task(self._loop())
+            try:
+                while self.run:
+                    # collect value
+                    val = self.value()
 
-    async def stop(self) -> None:
-        """
-        Stop running
-        """
-        self.run = False
+                    # run callback if value changed
+                    if val != self.prev_state:
+                        self.callback(val)
 
-        if self.process:
-            await self.process
-            self.process = None
+                    # update state
+                    self.prev_state = val
 
-    async def _loop(self) -> None:
-        """
-        Underlying loop that runs to collect data
-        """
-        try:
-            while self.run:
-                # collect value
-                val = self.value()
-
-                # run callback if value changed
-                if val != self.prev_state:
-                    await self.callback(val)
-
-                # update state
-                self.prev_state = val
-
-                # sleep
-                await asyncio.sleep(self.sleep_time)
-        except asyncio.exceptions.CancelledError:
-            pass
+                    # sleep
+                    time.sleep(self.sleep_time)
+            except Exception as e:
+                print("Stopping because received exception:", e)
 
 
 class DummyMonitor(PhysicalMonitor):
@@ -82,7 +65,9 @@ class DummyMonitor(PhysicalMonitor):
     Dummy monitor that randomly returns open or closed
     """
 
-    def __init__(self, on_value_change: Coroutine, sleep_time: float = 3) -> None:
+    def __init__(
+        self, on_value_change: Callable[[bool], None], sleep_time: float = 3
+    ) -> None:
         super().__init__(lambda: random.randint(0, 1) == 0, on_value_change, sleep_time)
 
 
@@ -99,7 +84,9 @@ try:
         in order to detect if the door is open or closed.
         """
 
-        def __init__(self, on_value_change: Coroutine, sleep_time: float = 0.1) -> None:
+        def __init__(
+            self, on_value_change: Callable[[bool], None], sleep_time: float = 0.1
+        ) -> None:
             """
             Initializes the GPIO-based Raspberry Pi door monitor.
 
