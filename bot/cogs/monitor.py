@@ -4,8 +4,45 @@ from typing import Union, Mapping, List, Tuple, Optional
 from datetime import datetime
 from util.checks import is_guild_owner
 from util.page import PageView
-import requests
 import dotenv
+from datetime import datetime
+import asyncio
+
+
+class DataHandler:
+    def __init__(self) -> None:
+        self.__data = (None, self.timestamp())
+        self.__prev_timestamp = self.__data[1]
+
+    @property
+    def data(self) -> bool:
+        self.__prev_timestamp = self.__data[1]
+        return self.__data[0]
+
+    @data.setter
+    def data(self, val) -> None:
+        self.__data = (val, self.timestamp())
+
+    @property
+    def has_new_data(self) -> bool:
+        return self.__data[1] != self.__prev_timestamp
+
+    @staticmethod
+    def timestamp():
+        return datetime.now()
+
+
+class Protocol(asyncio.Protocol):
+    def __init__(self, dh: DataHandler) -> None:
+        super().__init__()
+        self.dh = dh
+
+    def data_received(self, data: bytes) -> None:
+        """
+        The data received from the connection should be utf8 bytes
+        that decode to either "True" or "False"
+        """
+        self.dh.data = data.decode() == "True"
 
 
 class Monitor(commands.Cog):
@@ -54,6 +91,8 @@ class Monitor(commands.Cog):
             count=None,
             reconnect=True,
         )
+        self.server: asyncio.Server = None
+        self.data_handler = DataHandler()
 
     async def create_status_embed(
         self, door_open: bool
@@ -86,17 +125,12 @@ class Monitor(commands.Cog):
         nothing will happen.
         """
         # get the door status
-        try:
-            door_status = requests.get(dotenv.dotenv_values()["DOOR_URL"])
-            door_open = door_status.json()["door"][0]["open"]
-        except Exception as e:
-            print("Couldn't get door status because", e)
-            door_open = False
+        if not self.data_handler.has_new_data:
+            return
+
+        door_open = self.data_handler.data
 
         m = {False: "Closed", True: "Open"}
-        if len(self.history) > 0 and m[door_open] == self.history[-1][1]:
-            # don't do anything if the status is the same
-            return
 
         for guild in self.messages:
             embed, _ = await self.create_status_embed(door_open)
@@ -106,18 +140,17 @@ class Monitor(commands.Cog):
         if len(self.history) > self.max_history_len:
             self.history = self.history[1:]
 
-    @commands.command(name="linkMonitor", aliases=["link"])
+    @commands.command(name="link")
     @commands.check_any(is_guild_owner(), commands.is_owner())
     async def link_channel(
         self, ctx: commands.Context, channel: Union[discord.TextChannel, str]
     ):
         """
         Set the bot up to send door monitor announcements to the given channel.
-        This is necessary to see output after starting the monitor
 
         Examples:
-            `-linkMonitor announcements`
-            `-linkMonitor #announcements` where #announcements is the mention for the announcements text channel
+            `-link announcements`
+            `-link #announcements` where #announcements is the mention for the announcements text channel
 
         Arguments:
             channel - either the name of the channel or the channel's mention
@@ -153,24 +186,43 @@ class Monitor(commands.Cog):
                 "Not linked to any channel. Use `-linkMonitor` to link the door monitor to a channel."
             )
 
-    @commands.command(name="startMonitor", aliases=["start"])
+    @commands.command(name="start")
     @commands.is_owner()
-    async def start_monitor(self, ctx: commands.Context):
+    async def start(self, ctx: commands.Context):
         """
-        Start the physical monitor so that updates on the door status
-        will be sent to the channel that this bot is set to send
-        door announcements to.
+        Start sending door announcement messages
+        to the channel this bot is linked to.
         """
-        self.task.start()
+        if not self.task.is_running():
+            self.task.start()
+        if self.server is None:
+            loop = asyncio.get_event_loop()
+            self.server: asyncio.Server = await loop.create_server(
+                lambda: Protocol(self.data_handler),
+                "localhost",
+                int(dotenv.dotenv_values()["DOOR_PORT"]),
+            )
+            await self.server.start_serving()
+
         await ctx.send("Started monitoring door status.")
 
-    @commands.command(name="stopMonitor", aliases=["stop"])
-    @commands.is_owner()
-    async def stop_monitor(self, ctx: commands.Context):
+    async def _stop(self):
         """
-        Stop the physical monitor, stopping all door announcement messages as well.
+        Stop all door announcement messages.
         """
+        if self.server is not None:
+            self.server.close()
+            await self.server.wait_closed()
+            self.server = None
         self.task.stop()
+
+    @commands.command(name="stop")
+    @commands.is_owner()
+    async def stop(self, ctx: commands.Context):
+        """
+        Stop all door announcement messages
+        """
+        await self._stop()
         await ctx.send("Stopped monitoring door status.")
 
     async def get_page(self, page: int):
@@ -215,6 +267,12 @@ class Monitor(commands.Cog):
                 timeout=20,
             ),
         )
+
+    async def cog_unload(self) -> None:
+        """
+        Cleanup by stopping all tasks before unloading
+        """
+        await self._stop()
 
 
 async def setup(bot: commands.Bot):

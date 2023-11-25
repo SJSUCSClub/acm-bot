@@ -1,5 +1,5 @@
 from physical_monitor import MONITOR_TYPE
-import requests
+import socket
 import dotenv
 
 
@@ -10,8 +10,15 @@ def post_status(open: bool) -> None:
     Arguments:
         - open: bool - whether or not the door is currently open
     """
-    resp = requests.post(dotenv.dotenv_values()["DOOR_URL"], json={"open": open})
-    assert resp.status_code == 200  # we want it acknowledged
+    s = socket.socket()
+    try:
+        vals = dotenv.dotenv_values()
+        s.connect((vals["DOOR_URL"], int(vals["DOOR_PORT"])))
+    except ConnectionRefusedError:
+        return
+
+    # make sure we sent the value
+    assert s.send(str(open).encode()) == len(str(open).encode())
 
 
 if __name__ == "__main__":
