@@ -1,10 +1,48 @@
-from discord.ext import commands
+from discord.ext import commands, tasks
 import discord
-from typing import Union, Mapping, List, Tuple
-from monitor.physical_monitor import MONITOR_TYPE, PhysicalMonitor
-from checks.userchecks import is_guild_owner
+from typing import Union, Mapping, List, Tuple, Optional
 from datetime import datetime
+from util.checks import is_guild_owner
 from util.page import PageView
+import dotenv
+from datetime import datetime
+import asyncio
+
+
+class DataHandler:
+    def __init__(self) -> None:
+        self.__data = (None, self.timestamp())
+        self.__prev_timestamp = self.__data[1]
+
+    @property
+    def data(self) -> bool:
+        self.__prev_timestamp = self.__data[1]
+        return self.__data[0]
+
+    @data.setter
+    def data(self, val) -> None:
+        self.__data = (val, self.timestamp())
+
+    @property
+    def has_new_data(self) -> bool:
+        return self.__data[1] != self.__prev_timestamp
+
+    @staticmethod
+    def timestamp():
+        return datetime.now()
+
+
+class Protocol(asyncio.Protocol):
+    def __init__(self, dh: DataHandler) -> None:
+        super().__init__()
+        self.dh = dh
+
+    def data_received(self, data: bytes) -> None:
+        """
+        The data received from the connection should be utf8 bytes
+        that decode to either "True" or "False"
+        """
+        self.dh.data = data.decode() == "True"
 
 
 class Monitor(commands.Cog):
@@ -12,35 +50,59 @@ class Monitor(commands.Cog):
     Cog for interfacing with the physical hardware monitor.
     In general, the monitor should be used in the following way:
 
-    `-linkMonitor (channel)`
-    `-startMonitor`
-
-    However, the order doesn't strictly matter, and it can be interchanged
-    without errors.
+    `-link (channel)`
     """
 
     def __init__(
         self,
         bot: commands.Bot,
-        monitor_type: type,
-        num_per_page: int = 10,
-        max_history_len: int = 1000,
+        refresh_rate: Optional[int] = 1,
+        num_per_page: Optional[int] = 10,
+        max_history_len: Optional[int] = 1000,
     ) -> None:
+        """
+        Initialize the Monitor cog
+
+        Arguments:
+            - bot: commands.Bot - the bot that owns this cog
+            - refresh_rate: Optional[int] - how often to check the status of the door
+            - num_per_page: Optional[int] - the number of history entries to show per page
+            - max_history_len: Optional[int] - the total number of history entries to store
+        """
         super().__init__()
         self.bot = bot
 
         # maps from the guild id to the message that was sent
         self.messages: Mapping[int, discord.Message] = {}
-        self.physical_monitor: PhysicalMonitor = monitor_type(self.send_announcement)
 
+        self.refresh_rate = refresh_rate
         self.num_per_page = num_per_page
         self.max_history_len = max_history_len
+
         self.history: List[Tuple[int, str]] = []
         self.emojis = {"Open": ":unlock:", "Closed": ":lock:"}
+
+        self.task = tasks.Loop(
+            self.send_announcement,
+            seconds=self.refresh_rate,
+            hours=tasks.MISSING,
+            minutes=tasks.MISSING,
+            time=tasks.MISSING,
+            count=None,
+            reconnect=True,
+        )
+        self.server: asyncio.Server = None
+        self.data_handler = DataHandler()
 
     async def create_status_embed(
         self, door_open: bool
     ) -> Tuple[discord.Embed, discord.File]:
+        """
+        Create the status embed to display the door status
+
+        Arguments:
+            - door_open: bool - whether or not the door is open
+        """
         embed = discord.Embed(title="CS Club Door Status")
         file = discord.File(fp="logo.png", filename="logo.png")
         embed.set_thumbnail(url="attachment://logo.png")
@@ -55,39 +117,40 @@ class Monitor(commands.Cog):
 
         return embed, file
 
-    async def send_announcement(self, door_open: bool):
+    async def send_announcement(self):
         """
         Sends an announcement on the status of the door
         to the channel that the bot's door monitor is linked
         to. If the bot's door monitor isn't linked to a channel,
         nothing will happen.
-
-        Arguments:
-            - doorOpen: bool - if True, then the bot will send an announcement saying the door
-                is open. Else, the bot will send an announcement saying that the door is closed.
         """
+        # get the door status
+        if not self.data_handler.has_new_data:
+            return
+
+        door_open = self.data_handler.data
+
+        m = {False: "Closed", True: "Open"}
+
         for guild in self.messages:
             embed, _ = await self.create_status_embed(door_open)
             self.messages[guild] = await self.messages[guild].edit(embed=embed)
 
-        self.history.append(
-            (int(datetime.now().timestamp()), "Open" if door_open else "Closed")
-        )
+        self.history.append((int(datetime.now().timestamp()), m[door_open]))
         if len(self.history) > self.max_history_len:
             self.history = self.history[1:]
 
-    @commands.command(name="linkMonitor", aliases=["link"])
+    @commands.command(name="link")
     @commands.check_any(is_guild_owner(), commands.is_owner())
     async def link_channel(
         self, ctx: commands.Context, channel: Union[discord.TextChannel, str]
     ):
         """
         Set the bot up to send door monitor announcements to the given channel.
-        This is necessary to see output after starting the monitor
 
         Examples:
-            `-linkMonitor announcements`
-            `-linkMonitor #announcements` where #announcements is the mention for the announcements text channel
+            `-link announcements`
+            `-link #announcements` where #announcements is the mention for the announcements text channel
 
         Arguments:
             channel - either the name of the channel or the channel's mention
@@ -97,7 +160,12 @@ class Monitor(commands.Cog):
                 f"Sorry, couldn't find the channel {channel}. Please try again, and make sure there aren't any typos."
             )
         else:
-            embed, file = await self.create_status_embed(False)
+            if len(self.history) > 0:
+                val = self.history[-1][1]
+            else:
+                val = False
+
+            embed, file = await self.create_status_embed(val)
             self.messages[ctx.guild.id] = await channel.send(embed=embed, file=file)
             await ctx.send(
                 f"Now using {channel.mention} as the place to send announcements"
@@ -118,27 +186,52 @@ class Monitor(commands.Cog):
                 "Not linked to any channel. Use `-linkMonitor` to link the door monitor to a channel."
             )
 
-    @commands.command(name="startMonitor", aliases=["start"])
+    @commands.command(name="start")
     @commands.is_owner()
-    async def start_monitor(self, ctx: commands.Context):
+    async def start(self, ctx: commands.Context):
         """
-        Start the physical monitor so that updates on the door status
-        will be sent to the channel that this bot is set to send
-        door announcements to.
+        Start sending door announcement messages
+        to the channel this bot is linked to.
         """
-        await self.physical_monitor.start()
-        await ctx.send("Started physical monitor.")
+        if not self.task.is_running():
+            self.task.start()
+        if self.server is None:
+            loop = asyncio.get_event_loop()
+            self.server: asyncio.Server = await loop.create_server(
+                lambda: Protocol(self.data_handler),
+                "localhost",
+                int(dotenv.dotenv_values()["DOOR_PORT"]),
+            )
+            await self.server.start_serving()
 
-    @commands.command(name="stopMonitor", aliases=["stop"])
+        await ctx.send("Started monitoring door status.")
+
+    async def _stop(self):
+        """
+        Stop all door announcement messages.
+        """
+        if self.server is not None:
+            self.server.close()
+            await self.server.wait_closed()
+            self.server = None
+        self.task.stop()
+
+    @commands.command(name="stop")
     @commands.is_owner()
-    async def stop_monitor(self, ctx: commands.Context):
+    async def stop(self, ctx: commands.Context):
         """
-        Stop the physical monitor, stopping all door announcement messages as well.
+        Stop all door announcement messages
         """
-        await self.physical_monitor.stop()
-        await ctx.send("Stopped physical monitor.")
+        await self._stop()
+        await ctx.send("Stopped monitoring door status.")
 
     async def get_page(self, page: int):
+        """
+        Get the embed that displays the `page` page of the history
+
+        Arguments:
+            - page: int - the page (0 indexed) to display the history for
+        """
         embed = discord.Embed(
             title="Door History", description="", color=discord.Colour.blurple()
         )
@@ -153,6 +246,9 @@ class Monitor(commands.Cog):
         return embed
 
     def get_total_pages(self):
+        """
+        Return the total number of pages that the history command will have
+        """
         return len(self.history) // self.num_per_page + (
             1 if (len(self.history) % self.num_per_page) != 0 else 0
         )
@@ -174,10 +270,10 @@ class Monitor(commands.Cog):
 
     async def cog_unload(self) -> None:
         """
-        Stop physical monitor before unloading the cog
+        Cleanup by stopping all tasks before unloading
         """
-        await self.physical_monitor.stop()
+        await self._stop()
 
 
 async def setup(bot: commands.Bot):
-    await bot.add_cog(Monitor(bot, MONITOR_TYPE))
+    await bot.add_cog(Monitor(bot))
