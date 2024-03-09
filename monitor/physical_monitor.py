@@ -76,7 +76,7 @@ MONITOR_TYPE = DummyMonitor
 
 try:
     # will raise runtime error on non-raspi devices
-    import RPi.GPIO as GPIO
+    from gpiozero import Button
 
     class RPIMonitor(PhysicalMonitor):
         """
@@ -84,9 +84,7 @@ try:
         in order to detect if the door is open or closed.
         """
 
-        def __init__(
-            self, on_value_change: Callable[[bool], None], sleep_time: float = 0.1
-        ) -> None:
+        def __init__(self, on_value_change: Callable[[bool], None]) -> None:
             """
             Initializes the GPIO-based Raspberry Pi door monitor.
 
@@ -95,23 +93,19 @@ try:
                     If that boolean is True, then the door is open. if False, then closed.
             """
             super().__init__(
-                lambda: GPIO.input(DOOR_SENSOR_PIN) == GPIO.HIGH,
+                None,
                 on_value_change,
-                sleep_time,
+                None,
             )
 
-            # Set the GPIO mode to BCM
-            GPIO.setmode(GPIO.BCM)
+            self.button = Button(DOOR_SENSOR_PIN)
+            self.button.when_pressed = lambda: self.callback(True)
+            self.button.when_released = lambda: self.callback(False)
 
-            # Setup the GPIO pin as an input
-            GPIO.setup(DOOR_SENSOR_PIN, GPIO.IN, pull_up_down=GPIO.PUD_UP)
-
-        def __del__(self):
-            """
-            Cleans up GPIO pins
-            """
-            super().__del__()
-            GPIO.cleanup()
+        def start(self) -> None:
+            while 1:
+                # sleep
+                time.sleep(1)
 
     MONITOR_TYPE = RPIMonitor
     print("Using RPIMonitor.")

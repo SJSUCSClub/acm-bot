@@ -1,0 +1,10 @@
+[Unit]
+Description=Door Monitor service
+After=multi-user.target
+
+[Service]
+ExecStart=/home/acmcs/acm-bot/monitorservice.sh
+Type=forking
+
+[Install]
+WantedBy=default.target

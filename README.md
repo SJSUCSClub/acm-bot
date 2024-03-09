@@ -22,3 +22,11 @@ the `GND` pin on the Raspberry Pi (the 4th pin from the bottom on the right)
 the `GPIO 16` pin on the Raspberry Pi (the 3rd pin from the bottom on the right)
 
 ![pinout](image.png)
+
+## Raspi 5 setup
+To set up the repository on a raspberry pi 5 to use a physical monitor, follow the below steps to get `gpiozero` in a venv.
+* `sudo apt-get install python3-gpiozero`
+* `source (venv)/bin/activate && pip install gpiozero`
+* `cd (venv)/lib/python3.(tab)/site-packages`
+* `ln -s /lib/python3/dist-packages/_lgpio(tab) .`
+* `ln -s /lib/python3/dist-packages/lgpio.py .`
