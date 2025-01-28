@@ -3,6 +3,7 @@ import socket
 import dotenv
 import logging
 from datetime import datetime
+import os
 
 logger = logging.getLogger(__name__)
 
@@ -44,7 +45,11 @@ class StatusUpdater:
 
 def main():
     # configure root logger
-    logging.basicConfig(filename="monitor.log", level=logging.INFO, filemode="w")
+    logging.basicConfig(
+        filename=os.path.join(os.path.dirname(__file__), "monitor.log"),
+        level=logging.INFO,
+        filemode="w",
+    )
     logger.info("Started monitor service")
 
     # set up values

@@ -1,6 +1,6 @@
 from discord.ext import commands, tasks
 import discord
-from typing import Union, Mapping, Tuple, Optional, Deque
+from typing import Union, Mapping, Tuple, Optional, List
 from collections import deque
 from datetime import datetime
 from util.checks import is_guild_owner
@@ -78,7 +78,7 @@ class Monitor(commands.Cog):
         self.num_per_page = num_per_page
         self.max_history_len = max_history_len
 
-        self.history: Deque[Tuple[int, str]] = deque()
+        self.history: List[Tuple[int, str]] = []
         self.emojis = {"Open": ":unlock:", "Closed": ":lock:"}
 
         self.task = tasks.Loop(
@@ -135,7 +135,7 @@ class Monitor(commands.Cog):
             self.data_handler.data_changed = False
             self.history.append((int(datetime.now().timestamp()), m[door_open]))
             if len(self.history) > self.max_history_len:
-                self.history.popleft()
+                self.history = self.history[1:]
 
     @commands.command(name="link")
     @commands.check_any(is_guild_owner(), commands.is_owner())
@@ -264,6 +264,28 @@ class Monitor(commands.Cog):
                 timeout=20,
             ),
         )
+
+    @commands.command(name="logs")
+    @commands.is_owner()
+    async def get_logs(self, ctx: commands.Context, lines: int):
+        """
+        Get the last `lines` lines from the log file
+
+        Examples:
+        -logs 5
+        -logs 10
+        """
+        cur = deque()
+        vals = dotenv.dotenv_values()
+        with open(vals["MONITOR_LOG_LOCATION"]) as f:
+            line = f.readline()
+            while len(line) != 0:
+                cur.append(line)
+                if len(cur) > lines:
+                    cur.popleft()
+                line = f.readline()
+        joined = "".join(cur)
+        await ctx.send(f"```\n{joined}\n```")
 
     async def cog_unload(self) -> None:
         """

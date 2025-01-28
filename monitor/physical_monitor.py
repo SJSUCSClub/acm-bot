@@ -2,6 +2,7 @@ from typing import Callable
 from abc import ABC, abstractmethod
 import time
 from logging import Logger
+from datetime import datetime
 import random
 
 # Define the GPIO pin number to which the sensor is connected
@@ -77,6 +78,12 @@ class RPIMonitor(PhysicalMonitor):
 
         super().__init__(refresh_every, callback, logger)
         self.button = Button(DOOR_SENSOR_PIN)
+        self.button.when_pressed = lambda: self.logger.debug(
+            "Door open at %s", datetime.now().isoformat()
+        )
+        self.button.when_released = lambda: self.logger.debug(
+            "Door closed at %s", datetime.now().isoformat()
+        )
 
     def value(self):
         return self.button.value == 1  # 1 if pressed (open), 0 if not (closed)
