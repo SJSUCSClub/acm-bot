@@ -1,6 +1,7 @@
 from discord.ext import commands, tasks
 import discord
-from typing import Union, Mapping, List, Tuple, Optional
+from typing import Union, Mapping, Tuple, Optional, Deque
+from collections import deque
 from datetime import datetime
 from util.checks import is_guild_owner
 from util.page import PageView
@@ -11,21 +12,19 @@ import asyncio
 
 class DataHandler:
     def __init__(self) -> None:
-        self.__data = (None, self.timestamp())
-        self.__prev_timestamp = self.__data[1]
+        self.__cur_val = False
+        self.data_changed = True
+        self.update_timestamp = self.timestamp()
 
     @property
     def data(self) -> bool:
-        self.__prev_timestamp = self.__data[1]
-        return self.__data[0]
+        return self.__cur_val
 
     @data.setter
     def data(self, val) -> None:
-        self.__data = (val, self.timestamp())
-
-    @property
-    def has_new_data(self) -> bool:
-        return self.__data[1] != self.__prev_timestamp
+        self.data_changed = val != self.__cur_val
+        self.__cur_val = val
+        self.update_timestamp = self.timestamp()
 
     @staticmethod
     def timestamp():
@@ -79,7 +78,7 @@ class Monitor(commands.Cog):
         self.num_per_page = num_per_page
         self.max_history_len = max_history_len
 
-        self.history: List[Tuple[int, str]] = []
+        self.history: Deque[Tuple[int, str]] = deque()
         self.emojis = {"Open": ":unlock:", "Closed": ":lock:"}
 
         self.task = tasks.Loop(
@@ -125,20 +124,18 @@ class Monitor(commands.Cog):
         nothing will happen.
         """
         # get the door status
-        if not self.data_handler.has_new_data:
-            return
-
         door_open = self.data_handler.data
-
         m = {False: "Closed", True: "Open"}
 
         for guild in self.messages:
             embed, _ = await self.create_status_embed(door_open)
             self.messages[guild] = await self.messages[guild].edit(embed=embed)
 
-        self.history.append((int(datetime.now().timestamp()), m[door_open]))
-        if len(self.history) > self.max_history_len:
-            self.history = self.history[1:]
+        if self.data_handler.data_changed:
+            self.data_handler.data_changed = False
+            self.history.append((int(datetime.now().timestamp()), m[door_open]))
+            if len(self.history) > self.max_history_len:
+                self.history.popleft()
 
     @commands.command(name="link")
     @commands.check_any(is_guild_owner(), commands.is_owner())
@@ -183,7 +180,7 @@ class Monitor(commands.Cog):
             )
         else:
             await ctx.send(
-                "Not linked to any channel. Use `-linkMonitor` to link the door monitor to a channel."
+                "Not linked to any channel. Use `-link` to link the door monitor to a channel."
             )
 
     @commands.command(name="start")
