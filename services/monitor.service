@@ -3,7 +3,7 @@ Description=Door Monitor service
 After=multi-user.target
 
 [Service]
-ExecStart=/home/acm/acm-bot/monitorservice.sh
+ExecStart=/home/acmcs/acm-bot/monitorservice.sh
 Type=forking
 Restart=always
 

@@ -1,4 +1,4 @@
-cd /home/acm/acm-bot
+cd /home/acmcs/acm-bot
 source ./venv/bin/activate
 git pull
 
