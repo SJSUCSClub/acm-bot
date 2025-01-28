@@ -4,7 +4,7 @@ After=multi-user.target
 Before=monitor.service
 
 [Service]
-ExecStart=/home/acmcs/acm-bot/discordbotservice.sh
+ExecStart=/home/acmcs/acm-bot/services/discordbotservice.sh
 Type=forking
 Restart=always
 
