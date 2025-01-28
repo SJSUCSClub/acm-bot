@@ -79,11 +79,11 @@ class RPIMonitor(PhysicalMonitor):
         super().__init__(refresh_every, callback, logger)
         self.button = Button(DOOR_SENSOR_PIN)
         self.button.when_pressed = lambda: self.logger.debug(
-            "Door open at %s", datetime.now().isoformat()
+            "Door closed at %s", datetime.now().isoformat()
         )
         self.button.when_released = lambda: self.logger.debug(
-            "Door closed at %s", datetime.now().isoformat()
+            "Door open at %s", datetime.now().isoformat()
         )
 
     def value(self):
-        return self.button.value == 1  # 1 if pressed (open), 0 if not (closed)
+        return self.button.value == 0  # 1 if pressed (closed), 0 if not (open)

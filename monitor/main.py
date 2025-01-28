@@ -47,7 +47,7 @@ def main():
     # configure root logger
     logging.basicConfig(
         filename=os.path.join(os.path.dirname(__file__), "monitor.log"),
-        level=logging.INFO,
+        level=logging.DEBUG,
         filemode="w",
     )
     logger.info("Started monitor service")
