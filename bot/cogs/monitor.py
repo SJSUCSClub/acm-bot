@@ -8,6 +8,8 @@ from util.page import PageView
 import dotenv
 from datetime import datetime
 import asyncio
+from dataclasses import dataclass
+import textwrap
 
 
 class DataHandler:
@@ -44,6 +46,12 @@ class Protocol(asyncio.Protocol):
         self.dh.data = data.decode() == "True"
 
 
+@dataclass
+class HistoryPoint:
+    timestamp: int  # the integer value of the seconds since the epoch
+    is_open: bool  # whether the door was open at this time
+
+
 class Monitor(commands.Cog):
     """
     Cog for interfacing with the physical hardware monitor.
@@ -78,8 +86,9 @@ class Monitor(commands.Cog):
         self.num_per_page = num_per_page
         self.max_history_len = max_history_len
 
-        self.history: List[Tuple[int, str]] = []
-        self.emojis = {"Open": ":unlock:", "Closed": ":lock:"}
+        self.history: List[HistoryPoint] = []
+        self.to_str = {True: "Open", False: "Closed"}
+        self.emojis = {True: ":unlock:", False: ":lock:"}
 
         self.task = tasks.Loop(
             self.send_announcement,
@@ -125,7 +134,6 @@ class Monitor(commands.Cog):
         """
         # get the door status
         door_open = self.data_handler.data
-        m = {False: "Closed", True: "Open"}
 
         for guild in self.messages:
             embed, _ = await self.create_status_embed(door_open)
@@ -133,7 +141,9 @@ class Monitor(commands.Cog):
 
         if self.data_handler.data_changed:
             self.data_handler.data_changed = False
-            self.history.append((int(datetime.now().timestamp()), m[door_open]))
+            self.history.append(
+                HistoryPoint(int(datetime.now().timestamp()), door_open)
+            )
             if len(self.history) > self.max_history_len:
                 self.history = self.history[1:]
 
@@ -158,11 +168,11 @@ class Monitor(commands.Cog):
             )
         else:
             if len(self.history) > 0:
-                val = self.history[-1][1]
+                is_open = self.history[-1].is_open
             else:
-                val = False
+                is_open = False
 
-            embed, file = await self.create_status_embed(val)
+            embed, file = await self.create_status_embed(is_open)
             self.messages[ctx.guild.id] = await channel.send(embed=embed, file=file)
             await ctx.send(
                 f"Now using {channel.mention} as the place to send announcements"
@@ -236,8 +246,8 @@ class Monitor(commands.Cog):
         start = -(page + 1) * self.num_per_page
         end = -page * self.num_per_page if page != 0 else len(self.history)
 
-        for timestamp, state in reversed(self.history[start:end]):
-            embed.description += f"{self.emojis[state]} {state} - <t:{timestamp}>\n"
+        for point in reversed(self.history[start:end]):
+            embed.description += f"{self.emojis[point.is_open]} {self.to_str[point.is_open]} - <t:{point.timestamp}>\n"
 
         embed.set_footer(text=f"Showing page {page+1}/{self.get_total_pages()}")
         return embed
@@ -286,6 +296,39 @@ class Monitor(commands.Cog):
                 line = f.readline()
         joined = "".join(cur)
         await ctx.send(f"```\n{joined}\n```")
+
+    @commands.command(name="status")
+    async def status(self, ctx: commands.Context):
+        """
+        Get the status of the monitor
+
+        Example:
+        -status
+        """
+
+        THRESHOLD = 10  # arbitrary threshold before "no longer receiving live messages"
+        started = self.server is not None
+        linked = ctx.guild.id in self.messages
+        still_receiving = (
+            len(self.history) > 0
+            and datetime.now().timestamp() - self.history[-1].timestamp < THRESHOLD
+        )
+        good = started and linked and still_receiving
+
+        # create and send embed
+        embed = discord.Embed(
+            title=f"{'' if good else 'not '}functioning Properly".title(),
+            description="",
+            color=discord.Colour.green() if good else discord.Colour.red(),
+        )
+        embed.description = textwrap.dedent(
+            f"""
+            * Started: {started}
+            * Linked to a channel: {linked}
+            * Still receiving monitor messages: {still_receiving}
+            """
+        )
+        await ctx.send(embed=embed)
 
     async def cog_unload(self) -> None:
         """

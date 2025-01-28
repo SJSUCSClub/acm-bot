@@ -1,7 +1,66 @@
 # acm-bot
 
-This is a discord bot for the ACM chapter at SJSU. Eventually, it will link to
-the ACM door monitor and give notifications on the current room availability.
+This is a discord bot for the ACM chapter at SJSU. It links
+the ACM door monitor to the ACM discord server, providing notifications
+on the current room availability.
+
+## Getting Started
+
+First, make sure to install all the requirements. You can do so by running the following command
+from the root of the repository:
+
+```sh
+pip install -r requirements.txt
+```
+
+From there, the project is divided into two services, the physical hardware monitor and the discord bot. They are currently tightly coupled,
+and must be run on the same machine, although this may get changed in future versions.
+
+### Physical Monitor
+
+This requires the following variables:
+
+```
+DOOR_URL = <destination url to send door updates to>
+DOOR_PORT = <destination port to send door updates to>
+REFRESH_EVERY = <how often to send door status>
+```
+
+In order to run the monitor, simply run the below commands:
+
+```sh
+cd monitor
+python3 main.py
+```
+
+### Discord Bot
+
+This requires the following variables:
+
+```
+BOT_TOKEN = <Discord bot token>
+MONITOR_LOG_LOCATION = </path/to/monitor.log>
+```
+
+In order to run the discord bot, simply run the below commands:
+
+```sh
+cd bot
+python3 main.py
+```
+
+### Example
+
+In total, your `.env` file, which should be placed in the root of this repository,
+should look something like the following file:
+
+```
+BOT_TOKEN = MY_BOT_TOKEN
+DOOR_URL = localhost
+DOOR_PORT = 3000
+REFRESH_EVERY = 1
+MONITOR_LOG_LOCATION = /home/acmcs/acm-bot/monitor/monitor.log
+```
 
 ## Contributing
 
