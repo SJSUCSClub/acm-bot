@@ -319,7 +319,7 @@ class Monitor(commands.Cog):
         embed = discord.Embed(
             title=f"{'' if good else 'not '}functioning Properly".title(),
             description="",
-            color=discord.Colour.green() if good else discord.Colour.red(),
+            color=discord.Colour.red() if good else discord.Colour.green(),
         )
         embed.description = textwrap.dedent(
             f"""
