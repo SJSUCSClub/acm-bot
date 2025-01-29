@@ -106,7 +106,9 @@ chmod +x monitorservice.sh
 # symlink the service files
 sudo ln -s /home/acmcs/acm-bot/services/discordbot.service /etc/systemd/system/
 sudo ln -s /home/acmcs/acm-bot/services/monitor.service /etc/systemd/system/
+sudo ln -s /home/acmcs/acm-bot/services/gitpull.service /etc/systemd/system/
 # enable services
+sudo systemctl enable gitpull
 sudo systemctl enable discordbot
 sudo systemctl enable monitor
 ```
