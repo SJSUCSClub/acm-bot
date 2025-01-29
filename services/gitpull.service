@@ -1,0 +1,10 @@
+[Unit]
+Description=ACM Bot Git Pull Service
+After=multi-user.target
+
+[Service]
+ExecStart=git -C /home/acmcs/acm-bot/ -c safe.directory="/home/acmcs/acm-bot" pull
+Type=oneshot
+
+[Install]
+WantedBy=default.target
