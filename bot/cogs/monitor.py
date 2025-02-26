@@ -63,7 +63,7 @@ class Monitor(commands.Cog):
     def __init__(
         self,
         bot: commands.Bot,
-        refresh_rate: Optional[int] = 1,
+        refresh_rate: Optional[int] = 60,
         num_per_page: Optional[int] = 10,
         max_history_len: Optional[int] = 1000,
     ) -> None:
@@ -72,7 +72,7 @@ class Monitor(commands.Cog):
 
         Arguments:
             - bot: commands.Bot - the bot that owns this cog
-            - refresh_rate: Optional[int] - how often to check the status of the door
+            - refresh_rate: Optional[int] - how often to check the status of the door, in seconds
             - num_per_page: Optional[int] - the number of history entries to show per page
             - max_history_len: Optional[int] - the total number of history entries to store
         """
