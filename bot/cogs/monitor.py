@@ -307,12 +307,13 @@ class Monitor(commands.Cog):
         """
 
         # arbitrary threshold before "no longer receiving live messages"
-        THRESHOLD = 10  # 10 seconds, since
+        THRESHOLD = 10  # 10 seconds
         started = self.server is not None
         linked = ctx.guild.id in self.messages
         still_receiving = (
             len(self.history) > 0
-            and datetime.now().timestamp() - self.data_handler.update_timestamp
+            and datetime.now().timestamp()
+            - self.data_handler.update_timestamp.timestamp()
             < THRESHOLD
         )
         good = started and linked and still_receiving
