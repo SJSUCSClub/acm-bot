@@ -63,7 +63,7 @@ class Monitor(commands.Cog):
     def __init__(
         self,
         bot: commands.Bot,
-        refresh_rate: Optional[int] = 1,
+        update_freq: Optional[int] = 60,
         num_per_page: Optional[int] = 10,
         max_history_len: Optional[int] = 1000,
     ) -> None:
@@ -72,7 +72,7 @@ class Monitor(commands.Cog):
 
         Arguments:
             - bot: commands.Bot - the bot that owns this cog
-            - refresh_rate: Optional[int] - how often to check the status of the door
+            - update_freq: Optional[int] - how often to update the status of the door, in seconds
             - num_per_page: Optional[int] - the number of history entries to show per page
             - max_history_len: Optional[int] - the total number of history entries to store
         """
@@ -82,7 +82,7 @@ class Monitor(commands.Cog):
         # maps from the guild id to the message that was sent
         self.messages: Mapping[int, discord.Message] = {}
 
-        self.refresh_rate = refresh_rate
+        self.update_freq = update_freq
         self.num_per_page = num_per_page
         self.max_history_len = max_history_len
 
@@ -92,7 +92,7 @@ class Monitor(commands.Cog):
 
         self.task = tasks.Loop(
             self.send_announcement,
-            seconds=self.refresh_rate,
+            seconds=self.update_freq,
             hours=tasks.MISSING,
             minutes=tasks.MISSING,
             time=tasks.MISSING,
@@ -197,8 +197,7 @@ class Monitor(commands.Cog):
     @commands.is_owner()
     async def start(self, ctx: commands.Context):
         """
-        Start sending door announcement messages
-        to the channel this bot is linked to.
+        Start listening for door monitor messages.
         """
         if not self.task.is_running():
             self.task.start()
@@ -227,7 +226,8 @@ class Monitor(commands.Cog):
     @commands.is_owner()
     async def stop(self, ctx: commands.Context):
         """
-        Stop all door announcement messages
+        Stop listening for door status updates and stop
+        updating announcements
         """
         await self._stop()
         await ctx.send("Stopped monitoring door status.")
@@ -306,12 +306,15 @@ class Monitor(commands.Cog):
         -status
         """
 
-        THRESHOLD = 10  # arbitrary threshold before "no longer receiving live messages"
+        # arbitrary threshold before "no longer receiving live messages"
+        THRESHOLD = 10  # 10 seconds
         started = self.server is not None
         linked = ctx.guild.id in self.messages
         still_receiving = (
             len(self.history) > 0
-            and datetime.now().timestamp() - self.history[-1].timestamp < THRESHOLD
+            and datetime.now().timestamp()
+            - self.data_handler.update_timestamp.timestamp()
+            < THRESHOLD
         )
         good = started and linked and still_receiving
 
