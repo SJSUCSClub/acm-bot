@@ -306,7 +306,8 @@ class Monitor(commands.Cog):
         -status
         """
 
-        THRESHOLD = 10  # arbitrary threshold before "no longer receiving live messages"
+        # arbitrary threshold before "no longer receiving live messages"
+        THRESHOLD = 120  # 2 minutes, since update freq is 1 minute
         started = self.server is not None
         linked = ctx.guild.id in self.messages
         still_receiving = (
