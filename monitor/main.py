@@ -35,7 +35,8 @@ class StatusUpdater:
             return
 
         # make sure we sent the value
-        assert s.send(str(open).encode()) == len(str(open).encode())
+        msg = str(open).encode()
+        assert s.send(msg) == len(msg)
         if self.last_attempt_failed:
             self.last_attempt_failed = False
             logger.info(
