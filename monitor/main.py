@@ -12,9 +12,15 @@ logger = logging.getLogger(__name__)
 class StatusUpdater:
     def __init__(self):
         self.vals = dotenv.dotenv_values()
+        self.last_openness = None
         self.last_attempt_failed = False
 
     def __call__(self, open: bool):
+        if self.last_openness != open:
+            self.last_openness = open
+            self.send_update(open)
+
+    def send_update(self, open: bool):
         """
         Post a status update to the server
 
