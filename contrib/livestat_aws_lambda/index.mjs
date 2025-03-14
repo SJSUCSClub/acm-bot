@@ -137,7 +137,7 @@ export const handler = async (event, context) => {
 
     switch (req.path) {
     case "/service/status":
-      return await updateServiceStat(params.id, params.status);
+      return await updateServiceStat(params.id, event.body);
     case "/service":
       return await newService(params.id);
     }
