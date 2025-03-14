@@ -18,13 +18,17 @@ and must be run on the same machine, although this may get changed in future ver
 
 ### Physical Monitor
 
-This requires the following variables:
+Configure `.env` variables:
 
-```
-DOOR_URL = <destination url to send door updates to>
-DOOR_PORT = <destination port to send door updates to>
-REFRESH_EVERY = <how often to send door status>
-```
+- `DOOR_TCP_ENDPOINT` (required) \
+  Destination `host:port` pair to send door updates to.
+
+- `DOOR_HTTP_ENDPOINT` (optional) \
+  Destination HTTP URL to send door updates to. The update will be sent as a `POST` with `Content-Type: text/plain` and `Body:` "open" or "close". 
+  If unspecified, this feature is disabled.
+
+- `REFRESH_EVERY` (required) \
+  How often to send door status.
 
 In order to run the monitor, simply run the below commands:
 
@@ -35,12 +39,12 @@ python3 main.py
 
 ### Discord Bot
 
-This requires the following variables:
+Configure `.env` variables:
 
-```
-BOT_TOKEN = <Discord bot token>
-MONITOR_LOG_LOCATION = </path/to/monitor.log>
-```
+- `BOT_TOKEN` (required) \
+  Discord bot token
+- `MONITOR_LOG_LOCATION` (optional) \
+  /path/to/monitor.log
 
 In order to run the discord bot, simply run the below commands:
 
@@ -56,8 +60,8 @@ should look something like the following file:
 
 ```
 BOT_TOKEN = MY_BOT_TOKEN
-DOOR_URL = localhost
-DOOR_PORT = 3000
+DOOR_TCP_ENDPOINT = localhost:3000
+DOOR_HTTP_ENDPOINT = https://example.com/the-door?token=123456
 REFRESH_EVERY = 1
 MONITOR_LOG_LOCATION = /home/acmcs/acm-bot/monitor/monitor.log
 ```
