@@ -10,8 +10,15 @@ import {
 const dynamoClient = new DynamoDBClient({});
 const dynamo = DynamoDBDocumentClient.from(dynamoClient);
 
+async function decryptEnvVar(name) {
+  const util = await import("./util");
+  return util.decryptEnvVar(name);
+}
+
 const DYNAMO_TABLE = process.env.DYNAMO_TABLE;
-const MASTER_TOKEN = process.env.MASTER_TOKEN;
+const MASTER_TOKEN = process.env.MASTER_TOKEN_PROTECTED
+  ? await decryptEnvVar("MASTER_TOKEN_PROTECTED")
+  : process.env.MASTER_TOKEN;
 
 async function fetchStats(services) {
   const res = await dynamo.send(new BatchGetCommand({
