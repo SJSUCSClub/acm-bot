@@ -21,7 +21,7 @@ async function fetchStats(services) {
     },
   }));
 
-  return res;
+  return res.Responses['livestat.services'];
 }
 
 function renderStats(stats, format) {
@@ -37,10 +37,12 @@ function renderStats(stats, format) {
     const headerRow = `<tr><th>Service</th><th>Status</th></tr>`;
     const rows = stats.map(service => `<tr><td>${service.id}</td><td>${service.status}</td></tr>`);
     body = `<html><body><table>${headerRow}${rows}</table></body></html>`;
+    break;
   case "plaintext":
     // TODO better way to format this?
     contentType = "text/plain";
     body = stats.map(service => `# ${service.id}\n${service.status}\n`).join("\n");
+    break;
   default:
     return {
       statusCode: 400,
