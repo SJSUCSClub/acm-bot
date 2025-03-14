@@ -1,5 +1,6 @@
 from physical_monitor import RPIMonitor, DummyMonitor
 import socket
+import requests
 import dotenv
 import logging
 from datetime import datetime
@@ -24,6 +25,7 @@ class StatusUpdater:
         s = socket.socket()
         vals = dotenv.dotenv_values()
         try:
+            # TODO rename this to DOOR_ADDR "host:port" pair, it's not a (colloquial) URL!
             s.connect((vals["DOOR_URL"], int(vals["DOOR_PORT"])))
         except ConnectionRefusedError:
             if not self.last_attempt_failed:
@@ -43,6 +45,19 @@ class StatusUpdater:
                 "Able to connect to the server since %s", datetime.now().isoformat()
             )
 
+        endpoint = vals.get("DOOR_HTTP_ENDPOINT", None)
+        if endpoint is not None:
+            try:
+                status_text = 'open' if open else 'closed'
+                headers = {"Content-Type": "text/plain"}
+                r = requests.post(endpoint, headers=headers, data=status_text)
+                r.raise_for_status()
+            except (requests.ConnectionError, requests.HTTPError,):
+                logger.info(
+                    "Failed to send to HTTP endpoint %s",
+                    endpoint
+                )
+                # Do not set last_attempt_failed, this is an optional secondary mechanism
 
 def main():
     # configure root logger
