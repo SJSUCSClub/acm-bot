@@ -10,18 +10,19 @@ import {
 const dynamoClient = new DynamoDBClient({});
 const dynamo = DynamoDBDocumentClient.from(dynamoClient);
 
-const TOKEN_UPDATE_SERVICE = "TEST_TOKEN_123";
+const DYNAMO_TABLE = process.env.DYNAMO_TABLE;
+const MASTER_TOKEN = process.env.MASTER_TOKEN;
 
 async function fetchStats(services) {
   const res = await dynamo.send(new BatchGetCommand({
     RequestItems: {
-      "livestat.services": {
+      [DYNAMO_TABLE]: {
         Keys: services.map(id => ({ id })),
       },
     },
   }));
 
-  return res.Responses['livestat.services'];
+  return res.Responses[DYNAMO_TABLE];
 }
 
 function renderStats(stats, format) {
@@ -62,7 +63,7 @@ function renderStats(stats, format) {
 async function updateServiceStat(id, status) {
   try {
     await dynamo.send(new UpdateCommand({
-      TableName: "livestat.services",
+      TableName: DYNAMO_TABLE,
       Key: { id },
       UpdateExpression: "set #status = :status",
       ExpressionAttributeNames: {
@@ -88,7 +89,7 @@ async function updateServiceStat(id, status) {
 async function newService(id) {
   try {
     const res = await dynamo.send(new PutCommand({
-      TableName: "livestat.services",
+      TableName: DYNAMO_TABLE,
       Item: {
         id,
         status: '',
@@ -112,7 +113,7 @@ async function newService(id) {
 
 async function deleteService(id) {
   const res = await dynamo.send(new DeleteCommand({
-    TableName: "livestat.services",
+    TableName: DYNAMO_TABLE,
     Key: { id },
   }));
   console.log(`delete-service: "${id}" deleted`);
@@ -131,7 +132,7 @@ export const handler = async (event, context) => {
     }
     break;
   case "POST":
-    if (params.token !== TOKEN_UPDATE_SERVICE) {
+    if (params.token !== MASTER_TOKEN) {
       throw new Error("Invalid token");
     }
 
@@ -143,7 +144,7 @@ export const handler = async (event, context) => {
     }
     break;
   case "DELETE":
-    if (params.token !== TOKEN_UPDATE_SERVICE) {
+    if (params.token !== MASTER_TOKEN) {
       throw new Error("Invalid token");
     }
 
