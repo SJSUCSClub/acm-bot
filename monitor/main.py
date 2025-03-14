@@ -1,5 +1,6 @@
 from physical_monitor import RPIMonitor, DummyMonitor
 import socket
+from urllib.parse import urlparse
 import requests
 import dotenv
 import logging
@@ -14,21 +15,22 @@ class StatusUpdater:
         self.vals = dotenv.dotenv_values()
         self.last_openness = None
         self.last_tcp_attempt_failed = False
+        vals = dotenv.dotenv_values()
+        # https://bugs.python.org/issue754016
+        # We could use rsplit(':', 1) with some extra checks for IPv6, but that's more logic ensure correct
+        tcp_endpoint = urlparse('//' + vals["DOOR_TCP_ENDPOINT"])
+        self.tcp_host = tcp_endpoint.hostname
+        self.tcp_port = tcp_endpoint.port
+        self.http_endpoint = vals.get("DOOR_HTTP_ENDPOINT", None)
 
     def __call__(self, open: bool):
         if self.last_openness != open:
             self.last_openness = open
 
-            vals = dotenv.dotenv_values()
+            self.send_tcp_update(open)
+            self.send_http_update(open)
 
-            # TODO rename this to DOOR_ADDR "host:port" pair, it's not a (colloquial) URL!
-            self.send_tcp_update(vals["DOOR_URL"], int(vals["DOOR_PORT"]), open)
-
-            endpoint = vals.get("DOOR_HTTP_ENDPOINT", None)
-            if endpoint is not None:
-                self.send_http_update(endpoint, open)
-
-    def send_tcp_update(self, host: str, port: int, open: bool):
+    def send_tcp_update(self, open: bool):
         """
         Post a status update to the server
 
@@ -38,7 +40,7 @@ class StatusUpdater:
 
         s = socket.socket()
         try:
-            s.connect((host, port))
+            s.connect((self.tcp_host, self.tcp_port))
         except ConnectionRefusedError:
             if not self.last_tcp_attempt_failed:
                 logger.info(
@@ -57,15 +59,18 @@ class StatusUpdater:
                 "Able to connect to the server since %s", datetime.now().isoformat()
             )
 
-    def send_http_update(self, endpoint: str, open: bool):
+    def send_http_update(self, open: bool):
+        if self.http_endpoint is None:
+            return
+
         try:
             headers = {"Content-Type": "text/plain"}
-            r = requests.post(endpoint, headers=headers, data=("open" if open else "closed"))
+            r = requests.post(self.http_endpoint, headers=headers, data=("open" if open else "closed"))
             r.raise_for_status()
         except (requests.ConnectionError, requests.HTTPError):
             logger.info(
                 "Failed to send to HTTP endpoint %s",
-                endpoint
+                self.http_endpoint
             )
             # Do not set last_attempt_failed, this is an optional secondary mechanism
 
