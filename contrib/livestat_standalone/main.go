@@ -15,11 +15,9 @@ import (
 var masterToken string
 
 type Service struct {
-	id string
-
-	status string
-
-	lastUpdated time.Time
+	Id          string    `json:"-"`
+	Status      string    `json:"status"`
+	LastUpdated time.Time `json:"lastUpdated"`
 }
 
 type LiveStats struct {
@@ -78,7 +76,7 @@ func (ls *LiveStats) handlerMain(w http.ResponseWriter, req *http.Request) {
 				continue
 			}
 			fmt.Fprintf(w, "<tr><td>%s</td><td>%s</td><td>%s</td></tr>",
-				service.id, service.status, service.lastUpdated.Local().String())
+				service.Id, service.Status, service.LastUpdated.Local().String())
 		}
 		fmt.Fprint(w, "</table>")
 		fmt.Fprint(w, "</body></html>")
@@ -90,10 +88,10 @@ func (ls *LiveStats) handlerMain(w http.ResponseWriter, req *http.Request) {
 			if !exists {
 				continue
 			}
-			fmt.Fprintf(w, `%s
-since: %s
-is: %s\n`,
-				service.id, service.lastUpdated.Local().String(), service.status)
+			fmt.Fprintf(w, "%s\nsince: %s\nis: %s\n\n",
+				service.Id,
+				service.LastUpdated.Local().Format("2006-01-02 15:04:05 UTC-07"),
+				service.Status)
 		}
 	default:
 		http.Error(w, "Invalid format", http.StatusBadRequest)
@@ -119,9 +117,9 @@ func (ls *LiveStats) handlerNewService(w http.ResponseWriter, req *http.Request)
 	}
 
 	ls.services[id] = &Service{
-		id:          id,
-		status:      "",
-		lastUpdated: time.Now(),
+		Id:          id,
+		Status:      "",
+		LastUpdated: time.Now(),
 	}
 }
 
@@ -147,8 +145,8 @@ func (ls *LiveStats) handlerUpdateStatus(w http.ResponseWriter, req *http.Reques
 		http.Error(w, "", http.StatusInternalServerError)
 	}
 
-	service.status = string(body)
-	service.lastUpdated = time.Now()
+	service.Status = string(body)
+	service.LastUpdated = time.Now()
 }
 
 func (ls *LiveStats) handlerDeleteService(w http.ResponseWriter, req *http.Request) {
