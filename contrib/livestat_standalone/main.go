@@ -232,5 +232,5 @@ func main() {
 	http.HandleFunc("POST /service", state.handlerNewService)
 	http.HandleFunc("POST /service/status", state.handlerUpdateStatus)
 	http.HandleFunc("DELETE /service", state.handlerDeleteService)
-	http.ListenAndServe(":38083", nil)
+	http.ListenAndServe(stringDefault(os.Getenv("LISTEN"), ":38083"), nil)
 }
