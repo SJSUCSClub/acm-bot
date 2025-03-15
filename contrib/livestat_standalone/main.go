@@ -11,9 +11,6 @@ import (
 	"time"
 )
 
-// Initialize in main() and NEVER changed again
-var masterToken string
-
 type Service struct {
 	Id          string    `json:"-"`
 	Status      string    `json:"status"`
@@ -21,13 +18,48 @@ type Service struct {
 }
 
 type LiveStats struct {
-	services map[string]*Service
+	Services map[string]*Service
+
+	masterToken  string
+	dataFilePath string
 
 	usage sync.RWMutex
 }
 
-func (ls *LiveStats) save() {
+// Not thread save. Lock `usage` in write mode before calling.
+func (ls *LiveStats) save() error {
+	if ls.dataFilePath == "" {
+		return nil
+	}
 
+	file, err := os.OpenFile(ls.dataFilePath, os.O_WRONLY|os.O_CREATE, 0o666)
+	if err != nil {
+		return err
+	}
+	defer file.Close()
+
+	return json.NewEncoder(file).Encode(ls)
+}
+
+func (ls *LiveStats) saveAndLog() {
+	err := ls.save()
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "save(): %v\n", err)
+	}
+}
+
+func (ls *LiveStats) load() error {
+	if ls.dataFilePath == "" {
+		return nil
+	}
+
+	file, err := os.Open(ls.dataFilePath)
+	if err != nil {
+		return err
+	}
+	defer file.Close()
+
+	return json.NewDecoder(file).Decode(&ls)
 }
 
 func stringDefault(a string, b string) string {
@@ -58,7 +90,7 @@ func (ls *LiveStats) handlerMain(w http.ResponseWriter, req *http.Request) {
 		// NOTE: potential memory pressure problem, if clients asks for too many services too quickly, for constructing this map
 		res := make(map[string]*Service, len(servicesId))
 		for _, id := range servicesId {
-			service, exists := ls.services[id]
+			service, exists := ls.Services[id]
 			if !exists {
 				continue
 			}
@@ -71,7 +103,7 @@ func (ls *LiveStats) handlerMain(w http.ResponseWriter, req *http.Request) {
 		fmt.Fprint(w, "<html><head>", HTML_STYLES, "</head><body>")
 		fmt.Fprint(w, "<table>", "<tr><th>Service</th><th>Status</th><th>Last Updated</th></tr>")
 		for _, id := range servicesId {
-			service, exists := ls.services[id]
+			service, exists := ls.Services[id]
 			if !exists {
 				continue
 			}
@@ -84,7 +116,7 @@ func (ls *LiveStats) handlerMain(w http.ResponseWriter, req *http.Request) {
 		w.Header().Add("Content-Type", "text/plain")
 		// ... first call to w.Write() below:
 		for _, id := range servicesId {
-			service, exists := ls.services[id]
+			service, exists := ls.Services[id]
 			if !exists {
 				continue
 			}
@@ -101,7 +133,7 @@ func (ls *LiveStats) handlerMain(w http.ResponseWriter, req *http.Request) {
 
 func (ls *LiveStats) handlerNewService(w http.ResponseWriter, req *http.Request) {
 	token := req.FormValue("token")
-	if token != masterToken {
+	if token != ls.masterToken {
 		http.Error(w, "Invalid token", http.StatusUnauthorized)
 		return
 	}
@@ -110,22 +142,23 @@ func (ls *LiveStats) handlerNewService(w http.ResponseWriter, req *http.Request)
 	defer ls.usage.Unlock()
 
 	id := req.FormValue("id")
-	_, exists := ls.services[id]
+	_, exists := ls.Services[id]
 	if exists {
 		http.Error(w, "Service already exists", http.StatusConflict)
 		return
 	}
 
-	ls.services[id] = &Service{
+	ls.Services[id] = &Service{
 		Id:          id,
 		Status:      "",
 		LastUpdated: time.Now(),
 	}
+	go ls.saveAndLog()
 }
 
 func (ls *LiveStats) handlerUpdateStatus(w http.ResponseWriter, req *http.Request) {
 	token := req.FormValue("token")
-	if token != masterToken {
+	if token != ls.masterToken {
 		http.Error(w, "Invalid token", http.StatusUnauthorized)
 		return
 	}
@@ -133,7 +166,7 @@ func (ls *LiveStats) handlerUpdateStatus(w http.ResponseWriter, req *http.Reques
 	ls.usage.Lock()
 	defer ls.usage.Unlock()
 
-	service, exists := ls.services[req.FormValue("id")]
+	service, exists := ls.Services[req.FormValue("id")]
 	if !exists {
 		http.Error(w, "Service does not exist", http.StatusBadRequest)
 		return
@@ -147,11 +180,12 @@ func (ls *LiveStats) handlerUpdateStatus(w http.ResponseWriter, req *http.Reques
 
 	service.Status = string(body)
 	service.LastUpdated = time.Now()
+	go ls.saveAndLog()
 }
 
 func (ls *LiveStats) handlerDeleteService(w http.ResponseWriter, req *http.Request) {
 	token := req.FormValue("token")
-	if token != masterToken {
+	if token != ls.masterToken {
 		http.Error(w, "Invalid token", http.StatusUnauthorized)
 		return
 	}
@@ -160,22 +194,38 @@ func (ls *LiveStats) handlerDeleteService(w http.ResponseWriter, req *http.Reque
 	defer ls.usage.Unlock()
 
 	id := req.FormValue("id")
-	_, exists := ls.services[id]
+	_, exists := ls.Services[id]
 	if !exists {
 		http.Error(w, "Service does not exist", http.StatusBadRequest)
 		return
 	}
 
-	delete(ls.services, id)
+	delete(ls.Services, id)
+	go ls.saveAndLog()
 }
 
 func main() {
-	masterToken = os.Getenv("MASTER_TOKEN")
-
 	state := LiveStats{
-		services: make(map[string]*Service),
+		Services: make(map[string]*Service),
+
+		masterToken:  os.Getenv("MASTER_TOKEN"),
+		dataFilePath: os.Getenv("DATA_FILE"),
 
 		usage: sync.RWMutex{},
+	}
+
+	err := state.load()
+	if err != nil {
+		if os.IsNotExist(err) {
+			fmt.Printf("load(): DATA_FILE does not exist\n")
+		} else {
+			fmt.Fprintf(os.Stderr, "load(): %v\n", err)
+		}
+	} else {
+		// Repopulate not-marshaled fields
+		for id, service := range state.Services {
+			service.Id = id
+		}
 	}
 
 	http.HandleFunc("GET /", state.handlerMain)
