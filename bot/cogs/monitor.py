@@ -206,7 +206,7 @@ class Monitor(commands.Cog):
             self.server: asyncio.Server = await loop.create_server(
                 lambda: Protocol(self.data_handler),
                 "localhost",
-                int(dotenv.dotenv_values()["DOOR_PORT"]),
+                int(dotenv.dotenv_values()["BOT_MONITOR_LISTEN_PORT"]),
             )
             await self.server.start_serving()
 

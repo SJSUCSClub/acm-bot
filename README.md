@@ -20,14 +20,17 @@ and must be run on the same machine, although this may get changed in future ver
 
 Configure `.env` variables:
 
-- `DOOR_TCP_ENDPOINT` (required) \
+- `DOOR_TCP_ENDPOINT` (required)
+
   Destination `host:port` pair to send door updates to.
 
-- `DOOR_HTTP_ENDPOINT` (optional) \
+- `DOOR_HTTP_ENDPOINT` (optional)
+
   Destination HTTP URL to send door updates to. The update will be sent as a `POST` with `Content-Type: text/plain` and `Body:` "open" or "close". 
   If unspecified, this feature is disabled.
 
-- `REFRESH_EVERY` (required) \
+- `REFRESH_EVERY` (required)
+
   How often to send door status.
 
 In order to run the monitor, simply run the below commands:
@@ -41,10 +44,20 @@ python3 main.py
 
 Configure `.env` variables:
 
-- `BOT_TOKEN` (required) \
+- `BOT_TOKEN` (required)
+
   Discord bot token
-- `MONITOR_LOG_LOCATION` (optional) \
-  /path/to/monitor.log
+
+- `BOT_MONITOR_LISTEN_PORT` (required)
+
+  TCP port at which the bot listens for monitor updates. TCP address is always any.
+  If unspecified, this feature will be disabled (as-if the monitor is not running).
+
+  In a normal deployment where the bot and the monitor runs on the same machine, you probably want to set this to the same port as `DOOR_TCP_ENDPOINT`.
+
+- `MONITOR_LOG_LOCATION` (optional)
+
+  /path/to/monitor.log, at which this bot reads logs from 
 
 In order to run the discord bot, simply run the below commands:
 
@@ -60,6 +73,7 @@ should look something like the following file:
 
 ```
 BOT_TOKEN = MY_BOT_TOKEN
+BOT_MONITOR_LISTEN_PORT = 3000
 DOOR_TCP_ENDPOINT = localhost:3000
 DOOR_HTTP_ENDPOINT = https://example.com/the-door?token=123456
 REFRESH_EVERY = 1
