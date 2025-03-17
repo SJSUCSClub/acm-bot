@@ -48,6 +48,15 @@ Configure `.env` variables:
 
   Discord bot token
 
+- `BOT_OWNER_IDS` (optional)
+
+  List of Discord user IDs that are authorized to send commands to this bot. If unspecified, all users are authorized.
+  Contents are simply passed to [discord.py](https://discordpy.readthedocs.io/en/stable/ext/commands/api.html#discord.ext.commands.Bot.owner_ids).
+
+- `BOT_COMMAND_PREFIX` (optional)
+
+  Your usual Discord bot command prefix. If unspecified, uses `-` (ASCII minus).
+
 - `BOT_MONITOR_LISTEN_PORT` (required)
 
   TCP port at which the bot listens for monitor updates. TCP address is always any.

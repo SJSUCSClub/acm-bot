@@ -1,10 +1,17 @@
 from bot import Bot
 from dotenv import dotenv_values
+import os
 
 
 if __name__ == "__main__":
-    # Owners: Elliot, Kevin, Trique
-    bot = Bot(
-        "-", owner_ids=[722118273784610857, 956269409805144084, 633467510833807370]
-    )
-    bot.run(dotenv_values()["BOT_TOKEN"])
+    config = {
+        **dotenv_values(".env"),
+        **dotenv_values(".env.secret"),
+        **os.environ,
+    }
+
+    kwargs = {}
+    if "BOT_OWNER_IDS" in config:
+        kwargs["owner_ids"] = [int(elm) for elm in config["BOT_OWNER_IDS"].split(',')]
+    bot = Bot(config, config.get("BOT_COMMAND_PREFIX", "-"), **kwargs)
+    bot.run(config["BOT_TOKEN"])

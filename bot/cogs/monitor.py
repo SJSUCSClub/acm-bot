@@ -5,7 +5,6 @@ from collections import deque
 from datetime import datetime
 from util.checks import is_guild_owner
 from util.page import PageView
-import dotenv
 from datetime import datetime
 import asyncio
 from dataclasses import dataclass
@@ -206,7 +205,7 @@ class Monitor(commands.Cog):
             self.server: asyncio.Server = await loop.create_server(
                 lambda: Protocol(self.data_handler),
                 "localhost",
-                int(dotenv.dotenv_values()["BOT_MONITOR_LISTEN_PORT"]),
+                int(self.bot.config["BOT_MONITOR_LISTEN_PORT"]),
             )
             await self.server.start_serving()
 
@@ -286,8 +285,7 @@ class Monitor(commands.Cog):
         -logs 10
         """
         cur = deque()
-        vals = dotenv.dotenv_values()
-        with open(vals["MONITOR_LOG_LOCATION"]) as f:
+        with open(self.bot.config["MONITOR_LOG_LOCATION"]) as f:
             line = f.readline()
             while len(line) != 0:
                 cur.append(line)

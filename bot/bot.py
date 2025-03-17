@@ -8,6 +8,7 @@ from typing import Union, Optional, List
 class Bot(commands.Bot):
     def __init__(
         self,
+        config: dict[str, str],
         command_prefix: str,
         intents: discord.Intents = discord.Intents.all(),
         description: Union[str, None] = None,
@@ -31,6 +32,7 @@ class Bot(commands.Bot):
             intents=intents,
             case_insensitive=True,
         )
+        self.config = config
         self.help_command = PrettyHelp(color=discord.Color.dark_purple())
         if len(owner_ids) > 0:
             self.owner_ids = owner_ids
