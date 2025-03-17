@@ -37,20 +37,30 @@ function renderStats(stats, format) {
   switch (format) {
   case "json":
     contentType = "application/json";
+    // DynamoDB gives us [{id, ...}, {id, ...}]
+    // we want to return {id: {...}, id: {...}} to signify that the order is meaningless
     body = JSON.stringify(Object.fromEntries(stats.map(service => {
       const {id, ...rest} = service;
       return [id, rest];
     })));
     break;
   case "html":
+      // CSS are inline because I really can't be bothered to spin up S3 (and pay for it)
     contentType = "text/html";
-    const styles = `<style>table { border-collapse: collapse; } th, td { border: 1px solid black; padding: 0.5em; }</style>`;
-    const headerRow = `<tr><th>Service</th><th>Status</th><th>Last Updated</th></tr>`;
+    const head = `<head>
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=0">
+<style>
+body { display: flex; justify-content: center; }
+table { border-collapse: collapse; }
+tr { border: 1px solid black; border-left: none; border-right: none; border-top: none; }
+th, td { padding: 0.5em; }
+</style>
+</head>`;
+    const headerRow = `<tr><th>The thing...</th><th>is...</th><th>since...</th></tr>`;
     const rows = stats.map(service => `<tr><td>${service.id}</td><td>${service.status}</td><td>${renderDateString(service.lastUpdated)}</td></tr>`);
-    body = `<html><head>${styles}</head><body><table>${headerRow}${rows}</table></body></html>`;
+    body = `<!DOCTYPE html><html>${head}<body><table>${headerRow}${rows}</table></body></html>`;
     break;
   case "plaintext":
-    // TODO better way to format this?
     contentType = "text/plain";
     body = stats.map(service => `${service.id}\nsince: ${renderDateString(service.lastUpdated)}\nis: ${service.status}\n`).join("\n");
     break;
@@ -62,7 +72,7 @@ function renderStats(stats, format) {
     statusCode: 200,
     headers: {
       "Content-Type": contentType,
-      "Cache-Control": "max-age=300", // Cache up to 5 minutes
+      "Cache-Control": "max-age=300", // Cache up to 5 minutes, just an arbitrary number I made up
     },
     body: body,
   }

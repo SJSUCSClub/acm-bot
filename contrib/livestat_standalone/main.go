@@ -69,10 +69,13 @@ func stringDefault(a string, b string) string {
 	return a
 }
 
-const HTML_STYLES = `
+const HTML_COMMON_HEADS = `
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=0">
 <style>
+body { display: flex; justify-content: center; }
 table { border-collapse: collapse; }
-th, td { border: 1px solid black; padding: 0.5em; }
+tr { border: 1px solid black; border-left: none; border-right: none; border-top: none; }
+th, td { padding: 0.5em; }
 </style>`
 
 func (ls *LiveStats) handlerMain(w http.ResponseWriter, req *http.Request) {
@@ -100,8 +103,8 @@ func (ls *LiveStats) handlerMain(w http.ResponseWriter, req *http.Request) {
 	case "html":
 		w.Header().Add("Content-Type", "text/html")
 		// ... first call to w.Write() below:
-		fmt.Fprint(w, "<html><head>", HTML_STYLES, "</head><body>")
-		fmt.Fprint(w, "<table>", "<tr><th>Service</th><th>Status</th><th>Last Updated</th></tr>")
+		fmt.Fprint(w, "<!DOCTYPE html><html><head>", HTML_COMMON_HEADS, "</head><body>")
+		fmt.Fprint(w, "<table>", "<tr><th>The thing...</th><th>is...</th><th>since...</th></tr>")
 		for _, id := range servicesId {
 			service, exists := ls.Services[id]
 			if !exists {
