@@ -1,6 +1,6 @@
 from discord.ext import commands, tasks
 import discord
-from typing import Union, Mapping, Tuple, Optional, List
+from typing import Union, Mapping, Tuple, Optional, List, NamedTuple
 from collections import deque
 from datetime import datetime
 from util.checks import is_guild_owner
@@ -45,8 +45,7 @@ class Protocol(asyncio.Protocol):
         self.dh.data = data.decode() == "True"
 
 
-@dataclass
-class HistoryPoint:
+class HistoryPoint(NamedTuple):
     timestamp: int  # the integer value of the seconds since the epoch
     is_open: bool  # whether the door was open at this time
 
@@ -80,7 +79,6 @@ class Monitor(commands.Cog):
 
         # maps from the guild id to the message that was sent
         self.messages: Mapping[int, discord.Message] = {}
-
         self.update_freq = update_freq
         self.num_per_page = num_per_page
         self.max_history_len = max_history_len
@@ -98,6 +96,33 @@ class Monitor(commands.Cog):
         )
         self.server: asyncio.Server = None
         self.data_handler = DataHandler()
+
+    async def cog_load(self):
+        self.load_persistent_state()
+
+    def load_persistent_state(self):
+        # Yes, this means if this class is renamed, the file needs to be moved.
+        # Don't care.
+        # This is fancy and that's all it matters (and that realistically nobody except ACM club) deploys this thing.
+        persistent_state = self.bot.load_state(type(self).__name__)
+        self.messages = {
+            int(guild_id): self.bot.get_guild(guild_id).get_channel(msg["channel"]).fetch_message(msg["message"])
+            for guild_id, msg in persistent_state["status_messages"].items()
+        }
+        self.history = [
+            HistoryPoint(int(elm["timestamp"]), bool(elm["open"]))
+            for elm in persistent_state["history"]
+        ]
+
+    def save_persistent_state(self):
+        data = {
+            "history": [point._asdict() for point in self.history],
+            "tracked_messages": {
+                guild_id: {"channel": msg.channel.id, "message": msg.id}
+                for guild_id, msg in self.messages.items()
+            },
+        }
+        self.bot.save_state(type(self).__name__, data)
 
     async def create_status_embed(
         self, door_open: bool
@@ -143,6 +168,7 @@ class Monitor(commands.Cog):
             )
             if len(self.history) > self.max_history_len:
                 self.history = self.history[1:]
+            self.save_persistent_state()
 
     @commands.command(name="link")
     @commands.check_any(is_guild_owner(), commands.is_owner())
@@ -171,6 +197,7 @@ class Monitor(commands.Cog):
 
             embed, file = await self.create_status_embed(is_open)
             self.messages[ctx.guild.id] = await channel.send(embed=embed, file=file)
+            self.save_persistent_state()
             await ctx.send(
                 f"Now using {channel.mention} as the place to send announcements"
             )

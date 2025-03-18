@@ -1,6 +1,7 @@
 import discord
 from discord.ext import commands
 import os
+import json
 from pretty_help import PrettyHelp
 from typing import Union, Optional, List
 
@@ -68,3 +69,19 @@ class Bot(commands.Bot):
         self, ctx: commands.Context, exception: commands.CommandError
     ) -> None:
         await ctx.send(exception)
+
+    def get_state_file(self, key: str) -> str:
+        return os.path.join(
+            self.config.get("BOT_PERSISTENT_STATE_LOCATION", "./bot_data"),
+            f"{key}.json")
+
+    def load_state(self, key: str) -> dict:
+        try:
+            with open(self.get_state_file(key), 'r') as f:
+                return json.load(f)
+        except FileNotFoundError:
+            return {}
+
+    def save_state(self, key: str, state: dict):
+        with open(self.get_state_file(key), 'w') as f:
+            f.write(json.dumps(state))

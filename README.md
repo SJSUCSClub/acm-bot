@@ -57,6 +57,10 @@ Configure `.env` variables:
 
   Your usual Discord bot command prefix. If unspecified, uses `-` (ASCII minus).
 
+- `BOT_PERSISTENT_STATE_LOCATION` (optional)
+
+  Directory in which persistent information is stored. If unspecified, `./bot_data` is used. 
+
 - `BOT_MONITOR_LISTEN_PORT` (required)
 
   TCP port at which the bot listens for monitor updates. TCP address is always any.
