@@ -86,8 +86,6 @@ class Monitor(commands.Cog):
         self.max_history_len = max_history_len
 
         self.history: List[HistoryPoint] = []
-        self.to_str = {True: "Open", False: "Closed"}
-        self.emojis = {True: ":unlock:", False: ":lock:"}
 
         self.task = tasks.Loop(
             self.send_announcement,
@@ -246,7 +244,9 @@ class Monitor(commands.Cog):
         end = -page * self.num_per_page if page != 0 else len(self.history)
 
         for point in reversed(self.history[start:end]):
-            embed.description += f"{self.emojis[point.is_open]} {self.to_str[point.is_open]} - <t:{point.timestamp}>\n"
+            openness = "Open" if point.is_open else "Closed"
+            emoji = ":unlock:" if point.is_open else ":lock:"
+            embed.description += f"{emoji} {openness} - <t:{point.timestamp}>\n"
 
         embed.set_footer(text=f"Showing page {page+1}/{self.get_total_pages()}")
         return embed
