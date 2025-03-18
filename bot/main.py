@@ -1,6 +1,7 @@
 from bot import Bot
 from dotenv import dotenv_values
 import os
+import discord
 
 
 if __name__ == "__main__":
@@ -10,7 +11,9 @@ if __name__ == "__main__":
         **os.environ,
     }
 
-    kwargs = {}
+    kwargs = {
+        "intents": discord.Intents.default()
+    }
     if "BOT_OWNER_IDS" in config:
         kwargs["owner_ids"] = [int(elm) for elm in config["BOT_OWNER_IDS"].split(',')]
     bot = Bot(config, config.get("BOT_COMMAND_PREFIX", "-"), **kwargs)

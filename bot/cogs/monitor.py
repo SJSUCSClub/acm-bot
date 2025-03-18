@@ -53,6 +53,11 @@ class HistoryPoint(NamedTuple):
 class Monitor(commands.Cog):
     """
     Cog for interfacing with the physical hardware monitor.
+
+    **Terminology:** "Monitor" is the thing which watches over some physical objects, generating "status" of each.
+    The monitor pushes "updates" of changed statuses over network to this bot.
+    Each status is then displayed in "tracked messages" on Discord, which are edited to reflect each update.
+
     In general, the monitor should be used in the following way:
 
     `-link (channel)`
@@ -61,7 +66,7 @@ class Monitor(commands.Cog):
     def __init__(
         self,
         bot: commands.Bot,
-        update_freq: Optional[int] = 60,
+        tracking_interval: Optional[int] = 60,
         num_per_page: Optional[int] = 10,
         max_history_len: Optional[int] = 1000,
     ) -> None:
@@ -70,47 +75,82 @@ class Monitor(commands.Cog):
 
         Arguments:
             - bot: commands.Bot - the bot that owns this cog
-            - update_freq: Optional[int] - how often to update the status of the door, in seconds
+            - tracking_interval: Optional[int] - how often to update the status of the door, in seconds
             - num_per_page: Optional[int] - the number of history entries to show per page
             - max_history_len: Optional[int] - the total number of history entries to store
         """
         super().__init__()
         self.bot = bot
 
-        # maps from the guild id to the message that was sent
-        self.messages: Mapping[int, discord.Message] = {}
-        self.update_freq = update_freq
+        self.tracked_messages: Mapping[int, discord.Message] = {}
+        """List of messages displaying the current monitor status. Persistent."""
+        self.tracking_interval = tracking_interval
+        """Number of seconds between editing tracked messages to reflect the current status."""
+
+        self.history: List[HistoryPoint] = []
         self.num_per_page = num_per_page
         self.max_history_len = max_history_len
 
-        self.history: List[HistoryPoint] = []
+        self.task: tasks.Loop = None
+        self.server: asyncio.Server = None
+        self.data_handler = DataHandler()
+
+    async def cog_load(self):
+        """
+        Startup relevant services
+        """
+        loop = asyncio.get_event_loop()
+        self.server: asyncio.Server = await loop.create_server(
+            lambda: Protocol(self.data_handler),
+            "localhost",
+            int(self.bot.config["BOT_MONITOR_LISTEN_PORT"]),
+        )
+        await self.server.start_serving()
+
+    @commands.Cog.listener()
+    async def on_ready(self):
+        await self.load_persistent_state()
 
         self.task = tasks.Loop(
             self.send_announcement,
-            seconds=self.update_freq,
+            seconds=self.tracking_interval,
             hours=tasks.MISSING,
             minutes=tasks.MISSING,
             time=tasks.MISSING,
             count=None,
             reconnect=True,
         )
-        self.server: asyncio.Server = None
-        self.data_handler = DataHandler()
+        self.task.start()
 
-    async def cog_load(self):
-        self.load_persistent_state()
+    async def cog_unload(self):
+        """
+        Cleanup by stopping all tasks before unloading
+        """
+        if self.server is not None:
+            self.server.close()
+            await self.server.wait_closed()
+            self.server = None
+        self.task.stop()
 
-    def load_persistent_state(self):
+    async def load_persistent_state(self):
+        """
+        Load persistent
+        :return:
+        """
         # Yes, this means if this class is renamed, the file needs to be moved.
         # Don't care.
         # This is fancy and that's all it matters (and that realistically nobody except ACM club) deploys this thing.
         persistent_state = self.bot.load_state(type(self).__name__)
-        self.messages = {
-            int(guild_id): self.bot.get_guild(guild_id).get_channel(msg["channel"]).fetch_message(msg["message"])
-            for guild_id, msg in persistent_state["status_messages"].items()
+        # When the state file doesn't exist, skip loading
+        if len(persistent_state) == 0:
+            return
+
+        self.tracked_messages = {
+            int(guild_id): await self.bot.get_guild(int(guild_id)).get_channel(msg["channel"]).fetch_message(msg["message"])
+            for guild_id, msg in persistent_state["tracked_messages"].items()
         }
         self.history = [
-            HistoryPoint(int(elm["timestamp"]), bool(elm["open"]))
+            HistoryPoint(int(elm["timestamp"]), bool(elm["is_open"]))
             for elm in persistent_state["history"]
         ]
 
@@ -119,7 +159,7 @@ class Monitor(commands.Cog):
             "history": [point._asdict() for point in self.history],
             "tracked_messages": {
                 guild_id: {"channel": msg.channel.id, "message": msg.id}
-                for guild_id, msg in self.messages.items()
+                for guild_id, msg in self.tracked_messages.items()
             },
         }
         self.bot.save_state(type(self).__name__, data)
@@ -157,9 +197,9 @@ class Monitor(commands.Cog):
         # get the door status
         door_open = self.data_handler.data
 
-        for guild in self.messages:
+        for guild in self.tracked_messages:
             embed, _ = await self.create_status_embed(door_open)
-            self.messages[guild] = await self.messages[guild].edit(embed=embed)
+            self.tracked_messages[guild] = await self.tracked_messages[guild].edit(embed=embed)
 
         if self.data_handler.data_changed:
             self.data_handler.data_changed = False
@@ -196,7 +236,7 @@ class Monitor(commands.Cog):
                 is_open = False
 
             embed, file = await self.create_status_embed(is_open)
-            self.messages[ctx.guild.id] = await channel.send(embed=embed, file=file)
+            self.tracked_messages[ctx.guild.id] = await channel.send(embed=embed, file=file)
             self.save_persistent_state()
             await ctx.send(
                 f"Now using {channel.mention} as the place to send announcements"
@@ -208,53 +248,14 @@ class Monitor(commands.Cog):
         """
         Test if the bot is correctly set up to send door monitor announcements to the given channel
         """
-        if ctx.guild.id in self.messages:
+        if ctx.guild.id in self.tracked_messages:
             await ctx.send(
-                f"Correctly linked to send door monitor announcements to {self.messages[ctx.guild.id].channel.mention}"
+                f"Correctly linked to send door monitor announcements to {self.tracked_messages[ctx.guild.id].channel.mention}"
             )
         else:
             await ctx.send(
                 "Not linked to any channel. Use `-link` to link the door monitor to a channel."
             )
-
-    @commands.command(name="start")
-    @commands.is_owner()
-    async def start(self, ctx: commands.Context):
-        """
-        Start listening for door monitor messages.
-        """
-        if not self.task.is_running():
-            self.task.start()
-        if self.server is None:
-            loop = asyncio.get_event_loop()
-            self.server: asyncio.Server = await loop.create_server(
-                lambda: Protocol(self.data_handler),
-                "localhost",
-                int(self.bot.config["BOT_MONITOR_LISTEN_PORT"]),
-            )
-            await self.server.start_serving()
-
-        await ctx.send("Started monitoring door status.")
-
-    async def _stop(self):
-        """
-        Stop all door announcement messages.
-        """
-        if self.server is not None:
-            self.server.close()
-            await self.server.wait_closed()
-            self.server = None
-        self.task.stop()
-
-    @commands.command(name="stop")
-    @commands.is_owner()
-    async def stop(self, ctx: commands.Context):
-        """
-        Stop listening for door status updates and stop
-        updating announcements
-        """
-        await self._stop()
-        await ctx.send("Stopped monitoring door status.")
 
     async def get_page(self, page: int):
         """
@@ -334,7 +335,7 @@ class Monitor(commands.Cog):
         # arbitrary threshold before "no longer receiving live messages"
         THRESHOLD = 10  # 10 seconds
         started = self.server is not None
-        linked = ctx.guild.id in self.messages
+        linked = ctx.guild.id in self.tracked_messages
         still_receiving = (
             len(self.history) > 0
             and datetime.now().timestamp()
@@ -357,12 +358,6 @@ class Monitor(commands.Cog):
             """
         )
         await ctx.send(embed=embed)
-
-    async def cog_unload(self) -> None:
-        """
-        Cleanup by stopping all tasks before unloading
-        """
-        await self._stop()
 
 
 async def setup(bot: commands.Bot):
