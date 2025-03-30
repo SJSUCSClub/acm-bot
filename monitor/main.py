@@ -24,10 +24,10 @@ class StatusUpdater:
         self.http_endpoint = vals.get("DOOR_HTTP_ENDPOINT", None)
 
     def __call__(self, open: bool):
+        self.send_tcp_update(open)
         if self.last_openness != open:
             self.last_openness = open
 
-            self.send_tcp_update(open)
             self.send_http_update(open)
 
     def send_tcp_update(self, open: bool):
