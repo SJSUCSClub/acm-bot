@@ -29,21 +29,36 @@ th, td { padding: 0.5em; }
 </style>
 </head>`;
 
-async function fetchServicesInfo(services, attribs) {
+
+
+/**
+ * Assumes provided dates are whole-days, without hour/minute/second part.
+ *
+ * @param {string} serviceId
+ * @param {Date} dateBegin
+ * @param {Date} dateEnd
+ * @returns {{ since: string, status: string }[]}
+ */
+async function fetchHistory(serviceId, dateBegin, dateEnd) {
+  const keys = []
+  // https://stackoverflow.com/a/10040679
+  for (let d = dateBegin; d <= dateEnd; d.setDate(d.getDate() + 1)) {
+    keys.push({ id: serviceId, date: d.getTime() });
+  }
+
   const res = await dynamo.send(new BatchGetCommand({
     RequestItems: {
       [DYNAMO_TABLE]: {
-        AttributesToGet: attribs,
-        Keys: services.map(id => ({ id })),
+        AttributesToGet: ["history"],
+        Keys: keys,
       },
     },
-  }));
+  }))
 
-  return res.Responses[DYNAMO_TABLE];
-}
-
-async function fsiHistory(service) {
-  return await fetchServicesInfo([service], ["history"]);
+  const res1 = res.Responses[DYNAMO_TABLE];
+  if (res1.length == 0)
+    return []
+  return res1[0].history
 }
 
 function renderHistory(history, format) {
@@ -57,12 +72,14 @@ function renderHistory(history, format) {
   }
   case "html": {
     contentType = "text/html";
-    const content = ["<!DOCTYPE html><html>", HTML_COMMON_HEAD, "<body>"];
-    for (const [date, status] of Object.entries(history).reverse()) {
-      content.push(`<tr><td>${renderDateString(date)}</td><td>${status}</td></tr>`);
-    }
-    content.push("</body></html>");
-    body = content.join("");
+    const rows = history.map(entr => `<tr><td>${renderDateString(entr.since)}</td><td>${entr.status}</td></tr>`)
+    body =
+`<!DOCTYPE html><html>
+${HTML_COMMON_HEAD}
+<body><table>
+<tr><th>since...</th><th>is...</th></tr>
+${rows.join("\n")}
+</table></body></html>`;
     break;
   }
   default:
@@ -81,8 +98,23 @@ function renderHistory(history, format) {
   };
 }
 
-async function fsiStats(services) {
-  return await fetchServicesInfo(services, ["id", "status", "lastUpdated"]);
+
+
+/**
+ * @param {string} servicesId
+ * @returns {{id: string, status: string, lastUpdated: string}[]}
+ */
+async function fetchStats(servicesId) {
+  const res = await dynamo.send(new BatchGetCommand({
+    RequestItems: {
+      [DYNAMO_TABLE]: {
+        AttributesToGet: ["id", "status", "lastUpdated"],
+        Keys: servicesId.map(id => ({ id, date: 0 })),
+      },
+    },
+  }));
+
+  return res.Responses[DYNAMO_TABLE];
 }
 
 function renderDateString(dateStr) {
@@ -91,7 +123,7 @@ function renderDateString(dateStr) {
   return date.toLocaleString("en-US", { timeZoneName: "shortOffset" });
 }
 
-function renderStats(stats, format) {
+function renderStats(services, format) {
   let contentType, body;
 
   switch (format) {
@@ -99,21 +131,36 @@ function renderStats(stats, format) {
     contentType = "application/json";
     // DynamoDB gives us [{id, ...}, {id, ...}]
     // we want to return {id: {...}, id: {...}} to signify that the order is meaningless
-    body = JSON.stringify(Object.fromEntries(stats.map(service => {
-      const {id, ...rest} = service;
+    body = JSON.stringify(Object.fromEntries(services.map(s => {
+      const {id, ...rest} = s;
       return [id, rest];
     })));
     break;
+
+
+
   case "html":
-      // CSS are inline because I really can't be bothered to spin up S3 (and pay for it)
+    // CSS are inline because I really can't be bothered to spin up S3 (and pay for it)
     contentType = "text/html";
-    const headerRow = `<tr><th>The thing...</th><th>is...</th><th>since...</th></tr>`;
-    const rows = stats.map(service => `<tr><td>${service.id}</td><td>${service.status}</td><td>${renderDateString(service.lastUpdated)}</td></tr>`);
-    body = `<!DOCTYPE html><html>${HTML_COMMON_HEAD}<body><table>${headerRow}${rows}</table></body></html>`;
+    const rows = services.map(s => `<tr><td>${s.id}</td><td>${s.status}</td><td>${renderDateString(s.lastUpdated)}</td></tr>`);
+    body =
+`<!DOCTYPE html><html>
+${HTML_COMMON_HEAD}
+<body><table>
+<tr><th>The thing...</th><th>is...</th><th>since...</th></tr>
+${rows.join("\n")}
+</table></body></html>`;
     break;
+
+
+
   case "plaintext":
     contentType = "text/plain";
-    body = stats.map(service => `${service.id}\nsince: ${renderDateString(service.lastUpdated)}\nis: ${service.status}\n`).join("\n");
+    body = services.map(s =>
+`${s.id}
+since: ${renderDateString(s.lastUpdated)}
+is: ${s.status}
+`).join("\n");
     break;
   default:
     return { statusCode: 400, body: "Invalid format" };
@@ -129,22 +176,39 @@ function renderStats(stats, format) {
   }
 }
 
+
+
 async function updateServiceStat(id, status) {
-  const timeNow = new Date().toISOString();
+  let nowIso8601, currDateUnix
+  {
+    const now = new Date();
+    nowIso8601 = now.toISOString();
+    now.setHours(0, 0, 0, 0);
+    currDateUnix = now.getTime();
+  }
+
   // Let errors propagate into logs and a 500
   await dynamo.send(new UpdateCommand({
     TableName: DYNAMO_TABLE,
-    Key: { id },
-    UpdateExpression: "set #status = :status, #lastUpdated = :now, #history = list_append(#history, :historyItem)",
+    Key: { id, date: 0 },
+    UpdateExpression: "set #status = :status, #lastUpdated = :now",
     ExpressionAttributeNames: {
       "#status": "status",
       "#lastUpdated": "lastUpdated",
-      "#history": "history",
     },
     ExpressionAttributeValues: {
       ":status": status,
-      ":now": timeNow,
-      ":historyItem": [{ status, since: timeNow }],
+      ":now": nowIso8601,
+    },
+  }));
+  await dynamo.send(new UpdateCommand({
+    TableName: DYNAMO_TABLE,
+    Key: { id, date: currDateUnix },
+    UpdateExpression: "set #history = list_append(if_not_exists(#history, :empty_list), :historyItem)",
+    ExpressionAttributeNames: { "#history": "history" },
+    ExpressionAttributeValues: {
+      ":empty_list": [],
+      ":historyItem": [{ status, since: nowIso8601 }],
     },
   }));
 
@@ -160,9 +224,9 @@ async function newService(id) {
       TableName: DYNAMO_TABLE,
       Item: {
         id,
+        date: 0,
         status: '',
         lastUpdated: new Date().toISOString(),
-        history: [],
       },
       // Don't override an existing service
       ConditionExpression: "attribute_not_exists(id)",
@@ -181,10 +245,13 @@ async function newService(id) {
 async function deleteService(id) {
   const res = await dynamo.send(new DeleteCommand({
     TableName: DYNAMO_TABLE,
-    Key: { id },
+    Key: { id, date: 0 },
   }));
   console.log(`delete-service: "${id}" deleted`);
+  // TODO do we want to delete all history associated with the service as well?
 }
+
+
 
 export const handler = async (event, context) => {
   const req = event.requestContext.http;
@@ -207,7 +274,7 @@ export const handler = async (event, context) => {
         }
       }
 
-      const stats = await fsiStats(services);
+      const stats = await fetchStats(services);
       return renderStats(stats, params.format || 'json');
     case "/history": {
       // Validation
@@ -216,7 +283,15 @@ export const handler = async (event, context) => {
       }
 
       // Respond
-      const history = await fsiHistory(param.service);
+      const service = params.service
+      if (!SERVICE_NAME_REGEX.test(service))
+        return { statusCode: 400, body: "Invalid service id" }
+      const dateBegin = new Date(params.dateBegin)
+      dateBegin.setHours(0, 0, 0, 0)
+      const dateEnd = new Date(params.dateEnd)
+      dateEnd.setHours(0, 0, 0, 0)
+
+      const history = await fetchHistory(service, dateBegin, dateEnd);
       return renderHistory(history, params.format || 'json');
     }
     }
