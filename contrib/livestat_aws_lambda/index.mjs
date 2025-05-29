@@ -299,14 +299,16 @@ const ACTUAL_HANDLER_MAP = {
   "/": async (event, context) => {
     if (event.requestContext.http.method !== "GET")
       throw err.invalidMethod()
-    const params = event.queryStringParameters || {}
 
-    // Validation
-    const services = parseServiceList(params.services)
+    return {
+      statusCode: 200,
+      headers: { "Content-Type": "text/plain" },
+      body:
+`This program has updated! See ACM #club-room-status channel for the new URL/shortcut.
 
-    // Respond
-    const stats = await fetchStats(services);
-    return renderStats(stats, params.format || 'json');
+CHANGES TLDR:
+/?services=... is now at /services/?services=...`,
+    }
   },
 
 
