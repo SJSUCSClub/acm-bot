@@ -296,22 +296,13 @@ function parseServiceList(str) {
 
 
 const ACTUAL_HANDLER_MAP = {
+  // Compatibility measure
+  // Previously, querying service status landed here; telling everybody who use the website, iOS shortcut, etc. to switch is probably impractical
+  // Problem: cache will store duplicates for this AND /service
+  //       -- probably not an issue, anticipating low volumes
   "/": async (event, context) => {
-    if (event.requestContext.http.method !== "GET")
-      throw err.invalidMethod()
-
-    return {
-      statusCode: 200,
-      headers: { "Content-Type": "text/plain" },
-      body:
-`This program has updated! See ACM #club-room-status channel for the new URL/shortcut.
-
-CHANGES TLDR:
-/?services=... is now at /services/?services=...`,
-    }
+    return await ACTUAL_HANDLER_MAP["/service"](event, context)
   },
-
-
 
   "/service": async (event, context) => {
     const params = event.queryStringParameters || {}
