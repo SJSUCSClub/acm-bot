@@ -7,6 +7,9 @@ import {
   DeleteCommand,
 } from "@aws-sdk/lib-dynamodb";
 
+import * as utils from "./utils.mjs"
+import * as err from "./err.mjs"
+
 const dynamoClient = new DynamoDBClient({});
 const dynamo = DynamoDBDocumentClient.from(dynamoClient);
 
@@ -34,56 +37,76 @@ th, td { padding: 0.5em; }
 /**
  * Assumes provided dates are whole-days, without hour/minute/second part.
  *
- * @param {string} serviceId
+ * @typedef {{ since: string, status: string }} HistoryItem
+ * @typedef {{ id: string, history: HistoryItem[] }[]} HistoryFetchRes
+ *
+ * @param {string[]} servicesId
  * @param {Date} dateBegin
  * @param {Date} dateEnd
- * @returns {{ since: string, status: string }[]}
+ * @returns {HistoryFetchRes}
  */
-async function fetchHistory(serviceId, dateBegin, dateEnd) {
+async function fetchHistory(servicesId, dateBegin, dateEnd) {
   const keys = []
   // https://stackoverflow.com/a/10040679
-  for (let d = dateBegin; d <= dateEnd; d.setDate(d.getDate() + 1)) {
-    keys.push({ id: serviceId, date: d.getTime() });
+  for (const id of servicesId) {
+    for (let d = new Date(dateBegin); d <= dateEnd; d.setDate(d.getDate() + 1)) {
+      keys.push({ id, date: d.getTime() });
+    }
   }
 
   const res = await dynamo.send(new BatchGetCommand({
     RequestItems: {
       [DYNAMO_TABLE]: {
-        AttributesToGet: ["history"],
+        AttributesToGet: ["id", "history"],
         Keys: keys,
       },
     },
   }))
 
-  const res1 = res.Responses[DYNAMO_TABLE];
-  if (res1.length == 0)
-    return []
-  return res1[0].history
+  return res.Responses[DYNAMO_TABLE]
 }
 
-function renderHistory(history, format) {
+/**
+ * @param {Date} dateBegin
+ * @param {Date} dateEnd
+ * @param {HistoryFetchRes} history
+ * @param {'json' | 'html'} format
+ */
+function renderHistory(dateBegin, dateEnd, history, format) {
   let contentType, body;
 
   switch (format) {
   case "json": {
     contentType = "application/json";
     body = JSON.stringify(history);
-    break;
-  }
+  } break;
+
   case "html": {
     contentType = "text/html";
-    const rows = history.map(entr => `<tr><td>${renderDateString(entr.since)}</td><td>${entr.status}</td></tr>`)
+    const rows = history.flatMap(
+      ({ id, history }) => history.map(
+        item => `<tr><td>${id}</td><td>${item.status}</td><td>${utils.dateStored2Locale(item.since)}</td></tr>`
+      )
+    )
     body =
 `<!DOCTYPE html><html>
 ${HTML_COMMON_HEAD}
-<body><table>
-<tr><th>since...</th><th>is...</th></tr>
-${rows.join("\n")}
-</table></body></html>`;
-    break;
-  }
+<body>
+<main>
+  <h1>HISTORY OF THINGS</h1>
+  <p>from: ${dateBegin.toDateString()}
+  <br>to: ${dateEnd.toDateString()}
+  </p>
+  <table>
+    <tr><th>The thing...</th><th>is...</th><th>since...</th></tr>
+    ${rows.join("\n")}
+    </table>
+</main>
+</body></html>`
+  } break;
+
   default:
-    return { statusCode: 400, body: "Invalid format" };
+    throw err.badRequest(`Invalid format "${format}"`)
   }
 
   return {
@@ -101,8 +124,10 @@ ${rows.join("\n")}
 
 
 /**
+ * @typedef {{id: string, status: string, lastUpdated: string}[]} StatsFetchRes
+ *
  * @param {string} servicesId
- * @returns {{id: string, status: string, lastUpdated: string}[]}
+ * @returns {StatsFetchRes}
  */
 async function fetchStats(servicesId) {
   const res = await dynamo.send(new BatchGetCommand({
@@ -117,53 +142,49 @@ async function fetchStats(servicesId) {
   return res.Responses[DYNAMO_TABLE];
 }
 
-function renderDateString(dateStr) {
-  const date = new Date(dateStr);
-  // Timezone is set by TZ environment variable, which will get picked up by NodeJS (and libc) automatically
-  return date.toLocaleString("en-US", { timeZoneName: "shortOffset" });
-}
-
+/**
+ * @param {StatsFetchRes} services
+ * @param {'json' | 'html' | 'plaintext'} format
+ */
 function renderStats(services, format) {
   let contentType, body;
 
   switch (format) {
-  case "json":
+  case "json": {
     contentType = "application/json";
     // DynamoDB gives us [{id, ...}, {id, ...}]
     // we want to return {id: {...}, id: {...}} to signify that the order is meaningless
-    body = JSON.stringify(Object.fromEntries(services.map(s => {
-      const {id, ...rest} = s;
-      return [id, rest];
-    })));
-    break;
+    body = JSON.stringify(utils.list2obj(services));
+  } break;
 
-
-
-  case "html":
+  case "html": {
     // CSS are inline because I really can't be bothered to spin up S3 (and pay for it)
     contentType = "text/html";
-    const rows = services.map(s => `<tr><td>${s.id}</td><td>${s.status}</td><td>${renderDateString(s.lastUpdated)}</td></tr>`);
+    const rows = services.map(s => `<tr><td>${s.id}</td><td>${s.status}</td><td>${utils.dateStored2Locale(s.lastUpdated)}</td></tr>`);
     body =
 `<!DOCTYPE html><html>
 ${HTML_COMMON_HEAD}
-<body><table>
-<tr><th>The thing...</th><th>is...</th><th>since...</th></tr>
-${rows.join("\n")}
-</table></body></html>`;
-    break;
+<body>
+<main>
+  <table>
+  <tr><th>The thing...</th><th>is...</th><th>since...</th></tr>
+  ${rows.join("\n")}
+  </table>
+</main>
+</body></html>`;
+  } break;
 
-
-
-  case "plaintext":
+  case "plaintext": {
     contentType = "text/plain";
     body = services.map(s =>
 `${s.id}
-since: ${renderDateString(s.lastUpdated)}
+since: ${utils.dateStored2Locale(s.lastUpdated)}
 is: ${s.status}
 `).join("\n");
-    break;
+  } break;
+
   default:
-    return { statusCode: 400, body: "Invalid format" };
+    throw err.badRequest(`Invalid format "${format}"`)
   }
 
   return {
@@ -234,7 +255,7 @@ async function newService(id) {
     console.log(`new-service: "${id}" added`);
   } catch (e) {
     if (e.name === "ConditionalCheckFailedException") {
-      return { statusCode: 409, body: "Service already exists" };
+      throw err.conflict(`Service "${id} already exists`)
     }
 
     // Exception not recognized, fail dramatically
@@ -253,77 +274,130 @@ async function deleteService(id) {
 
 
 
-export const handler = async (event, context) => {
-  const req = event.requestContext.http;
-  const params = event.queryStringParameters || {};
+function checkToken(tok) {
+  if (tok !== MASTER_TOKEN)
+    throw err.unauthorized("Invalid token")
+}
 
-  switch (req.method) {
-  case "GET":
-    switch (req.path) {
-    case "/":
+function checkServiceId(id) {
+  if (!SERVICE_NAME_REGEX.test(id))
+    throw err.badRequest(`Invalid service ID "${id}"`)
+}
+
+function parseServiceList(str) {
+  if (!str)
+    throw err.badRequest("Missing parameter 'services'");
+
+  const services = str.split(",")
+  services.forEach(checkServiceId)
+  return services
+}
+
+
+
+const ACTUAL_HANDLER_MAP = {
+  "/": async (event, context) => {
+    if (event.requestContext.http.method !== "GET")
+      throw err.invalidMethod()
+    const params = event.queryStringParameters || {}
+
+    // Validation
+    const services = parseServiceList(params.services)
+
+    // Respond
+    const stats = await fetchStats(services);
+    return renderStats(stats, params.format || 'json');
+  },
+
+
+
+  "/service": async (event, context) => {
+    const params = event.queryStringParameters || {}
+
+    switch (event.requestContext.http.method) {
+    case "GET": {
       // Validation
-      if (!params.services) {
-        return { statusCode: 400, body: "Missing parameter 'services'" };
-      }
+      const services = parseServiceList(params.services)
 
       // Respond
-      const services = params.services.split(",");
-      for (const service of services) {
-        if (!SERVICE_NAME_REGEX.test(service)) {
-          return { statusCode: 400, body: "Invalid service id" };
-        }
-      }
-
       const stats = await fetchStats(services);
       return renderStats(stats, params.format || 'json');
-    case "/history": {
+    }
+
+    case "POST": {
       // Validation
-      if (!params.service) {
-        return { statusCode: 400, body: "Missing parameter 'service" };
-      }
+      checkToken(params.token);
+      checkServiceId(params.service)
 
       // Respond
-      const service = params.service
-      if (!SERVICE_NAME_REGEX.test(service))
-        return { statusCode: 400, body: "Invalid service id" }
-      const dateBegin = new Date(params.dateBegin)
-      dateBegin.setHours(0, 0, 0, 0)
-      const dateEnd = new Date(params.dateEnd)
-      dateEnd.setHours(0, 0, 0, 0)
-
-      const history = await fetchHistory(service, dateBegin, dateEnd);
-      return renderHistory(history, params.format || 'json');
-    }
-    }
-    break;
-  case "POST":
-    if (params.token !== MASTER_TOKEN) {
-      return { statusCode: 401, body: "Invalid token" };
-    }
-    if (!SERVICE_NAME_REGEX.test(params.id)) {
-      return { statusCode: 400, body: "Invalid service id" };
-    }
-
-    switch (req.path) {
-    case "/service/status":
-      return await updateServiceStat(params.id, event.body);
-    case "/service":
       return await newService(params.id);
     }
-    break;
-  case "DELETE":
-    if (params.token !== MASTER_TOKEN) {
-      return { statusCode: 401, body: "Invalid token" };
-    }
-    if (!SERVICE_NAME_REGEX.test(params.id)) {
-      return { statusCode: 400, body: "Invalid service id" };
-    }
 
-    switch (req.path) {
-    case "/service":
+    case "DELETE": {
+      // Validation
+      checkToken(params.token);
+      checkServiceId(params.service)
+
+      // Respond
       return await deleteService(params.id);
     }
-  }
+    }
+    throw err.invalidMethod()
+  },
 
-  return { statusCode: 400, body: "Invalid request" };
-};
+
+
+  "/service/status": async (event, context) => {
+    const params = event.queryStringParameters || {}
+
+    switch (event.requestContext.http.method) {
+    case "POST": {
+      // Validation
+      checkToken(params.token);
+      checkServiceId(params.service)
+
+      // Respond
+      return await updateServiceStat(params.id, event.body);
+    }
+    }
+    throw err.invalidMethod()
+  },
+
+
+
+  "/service/history": async (event, context) => {
+    if (event.requestContext.http.method !== "GET")
+      throw err.invalidMethod()
+    const params = event.queryStringParameters || {}
+
+    // Validation
+    const services = parseServiceList(params.services)
+
+    const dateBegin = new Date(params.dateBegin)
+    dateBegin.setHours(0, 0, 0, 0)
+    const dateEnd = new Date(params.dateEnd)
+    dateEnd.setHours(0, 0, 0, 0)
+
+    // Respond
+    const history = await fetchHistory(services, dateBegin, dateEnd)
+    return renderHistory(dateBegin, dateEnd, history, params.format || 'json')
+  },
+}
+
+export const handler = async (event, context) => {
+  try {
+    const h = ACTUAL_HANDLER_MAP[event.requestContext.http.path]
+    if (!h) {
+      return { statusCode: 404, body: "Not found" }
+    }
+
+    return await h(event, context)
+  } catch (e) {
+    if (e[err.returnable]) {
+      return e
+    }
+
+    console.log("Error cannot be converted to HTTP response:", e)
+    return { statusCode: 500, body: "Internal server error" }
+  }
+}
