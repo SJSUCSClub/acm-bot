@@ -296,12 +296,17 @@ function parseServiceList(str) {
 
 
 const ACTUAL_HANDLER_MAP = {
-  // Compatibility measure
   // Previously, querying service status landed here; telling everybody who use the website, iOS shortcut, etc. to switch is probably impractical
-  // Problem: cache will store duplicates for this AND /service
-  //       -- probably not an issue, anticipating low volumes
   "/": async (event, context) => {
-    return await ACTUAL_HANDLER_MAP["/service"](event, context)
+    return {
+      statusCode: 301,
+      headers: {
+        "Location": `/service/?${event.rawQueryString}`,
+        // Together with returning `event.body` below, hack to support if the client sent application/x-www-form-urlencoded
+        "Content-Type": (event.headers["Content-Type"] || "text/plain"),
+      },
+      body: event.body || "",
+    }
   },
 
   "/service": async (event, context) => {
