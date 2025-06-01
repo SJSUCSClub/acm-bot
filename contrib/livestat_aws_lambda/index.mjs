@@ -200,43 +200,50 @@ is: ${s.status}
 
 
 async function updateServiceStat(id, status) {
-  let nowIso8601, currDateUnix
+  let nowIso8601, currDateUnix, expireDateUnix
   {
-    const now = new Date();
-    nowIso8601 = now.toISOString();
-    now.setHours(0, 0, 0, 0);
-    currDateUnix = now.getTime();
+    const now = new Date()
+    nowIso8601 = now.toISOString()
+    now.setHours(0, 0, 0, 0)
+    currDateUnix = now.getTime()
+    // Each history item gets to live: half a year
+    now.setDate(now.getDate() + 180)
+    expireDateUnix = now.getTime()
   }
 
   // Let errors propagate into logs and a 500
-  await dynamo.send(new UpdateCommand({
-    TableName: DYNAMO_TABLE,
-    Key: { id, date: 0 },
-    UpdateExpression: "set #status = :status, #lastUpdated = :now",
-    ExpressionAttributeNames: {
-      "#status": "status",
-      "#lastUpdated": "lastUpdated",
-    },
-    ExpressionAttributeValues: {
-      ":status": status,
-      ":now": nowIso8601,
-    },
-  }));
-  await dynamo.send(new UpdateCommand({
-    TableName: DYNAMO_TABLE,
-    Key: { id, date: currDateUnix },
-    UpdateExpression: "set #history = list_append(if_not_exists(#history, :empty_list), :historyItem)",
-    ExpressionAttributeNames: { "#history": "history" },
-    ExpressionAttributeValues: {
-      ":empty_list": [],
-      ":historyItem": [{ status, since: nowIso8601 }],
-    },
-  }));
+  await Promise.all([
+    dynamo.send(new UpdateCommand({
+      TableName: DYNAMO_TABLE,
+      Key: { id, date: 0 },
+      UpdateExpression: "set #status = :status, #lastUpdated = :now",
+      ExpressionAttributeNames: {
+        "#status": "status",
+        "#lastUpdated": "lastUpdated",
+      },
+      ExpressionAttributeValues: {
+        ":status": status,
+        ":now": nowIso8601,
+      },
+    })),
+    dynamo.send(new UpdateCommand({
+      TableName: DYNAMO_TABLE,
+      Key: { id, date: currDateUnix },
+      UpdateExpression: "set #ttl = :expiresAt, #history = list_append(if_not_exists(#history, :empty_list), :historyItem)",
+      ExpressionAttributeNames: { "#ttl": "ttl",  "#history": "history" },
+      ExpressionAttributeValues: {
+        ":empty_list": [],
+        ":historyItem": [{ status, since: nowIso8601 }],
+        // DynamoDB expects the timestamp to be *seconds* since epoch, Date.getTime returns *miliseconds*
+        ":expiresAt": Math.ceil(expireDateUnix / 1000),
+      },
+    })),
+  ])
 
   return {
     statusCode: 200,
     body: "OK",
-  };
+  }
 }
 
 async function newService(id) {
